@@ -1,0 +1,300 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. User & Account Telemetry
+// ----------------------------------------------------
+model User {
+  id                      String           @id @default(cuid())
+  name                    String           @default("Alex Morgan")
+  email                   String           @unique @default("alex.morgan@smartlearn.ai")
+  avatarUrl               String           @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
+  streakDays              Int              @default(7)
+  totalHoursLearned       Float            @default(28.5)
+  overallMasteryPercentage Int             @default(72)
+  activeCoursesCount      Int              @default(3)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  preferences             UserPreferences?
+  courses                 Course[]
+  mistakeLogs             MistakeLog[]
+  activities              UserActivity[]
+}
+
+model UserPreferences {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  preferredDailyMinutes Int     @default(60)
+  preferredTime        String   @default("06:00 PM")
+  learningStyle        String   @default("visual-practice")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------
+// 2. Courses & Ingested Sources (Model 1)
+// ----------------------------------------------------
+model Course {
+  id                 String         @id
+  userId             String
+  title              String
+  category           String         @default("Computer Engineering")
+  goal               String
+  currentLevel       String         @default("Intermediate") // Beginner | Intermediate | Advanced
+  totalDays          Int            @default(30)
+  currentDay         Int            @default(8)
+  progressPercentage Int            @default(27)
+  minutesPerDay      Int            @default(60)
+  preferredTime      String         @default("06:00 PM")
+  currentTopic       String
+  nextSessionTime    String         @default("Tomorrow, 06:00 PM")
+  nextSessionTopic   String         @default("Multiplexers & Demultiplexers")
+  description        String
+  materialsCount     Int            @default(6)
+  streakDays         Int            @default(7)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources            CourseSource[]
+  concepts           ConceptNode[]
+  conceptEdges       ConceptEdge[]
+  daysList           DayPlan[]
+  lessons            Lesson[]
+  quizzes            Quiz[]
+  mistakeLogs        MistakeLog[]
+  revisions          RevisionNote[]
+  activities         UserActivity[]
+}
+
+model CourseSource {
+  id             String   @id @default(cuid())
+  courseId       String
+  type           String   // "file" | "url" | "document"
+  title          String
+  url            String?
+  fileName       String?
+  extractedText  String?
+  metadata       String?  // JSON string: duration, author, format
+  status         String   @default("indexed") // "pending" | "indexed" | "failed"
+  createdAt      DateTime @default(now())
+
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------
+// 3. Knowledge Graph & DAG Relationships (Model 2)
+// ----------------------------------------------------
+model ConceptNode {
+  id                String         @id // e.g. "c-mux", "c-kmap"
+  courseId          String
+  name              String
+  slug              String
+  status            String         @default("upcoming") // "completed" | "current" | "upcoming" | "weak"
+  masteryPercentage Int            @default(0)
+  importance        String         @default("high")     // "high" | "medium" | "low"
+  difficulty        String         @default("Intermediate") // "Beginner" | "Intermediate" | "Advanced"
+  estimatedMinutes  Int            @default(45)
+  description       String
+  dayAssigned       Int?
+  keyFormulas       String?        // JSON string array of formulas
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  course            Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayPlans          DayPlan[]
+  lessons           Lesson[]
+  quizzes           Quiz[]
+  mistakeLogs       MistakeLog[]
+  revisions         RevisionNote[]
+}
+
+model ConceptEdge {
+  id             String   @id @default(cuid())
+  courseId       String
+  fromConceptId  String   // Prerequisite concept
+  toConceptId    String   // Dependent concept
+  relationType   String   @default("prerequisite") // "prerequisite" | "enhances"
+  createdAt      DateTime @default(now())
+
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------
+// 4. Day-Wise Curriculum (Model 2 & 3)
+// ----------------------------------------------------
+model DayPlan {
+  id              String         @id @default(cuid())
+  courseId        String
+  dayNumber       Int
+  title           String
+  conceptId       String
+  status          String         @default("locked") // "completed" | "current" | "locked"
+  topicsCovered   String         // JSON string array of topic strings
+  durationMinutes Int            @default(60)
+  quizScore       Int?
+  hasMistake      Boolean        @default(false)
+  mistakeConcept  String?
+  revisionNote    String?
+
+  sourceLinkTitle    String?
+  sourceLinkSource   String?
+  sourceLinkUrl      String?
+  sourceLinkDuration String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  course          Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  concept         ConceptNode    @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  lessons         Lesson[]
+  quizzes         Quiz[]
+  revisions       RevisionNote[]
+  mistakeLogs     MistakeLog[]
+
+  @@unique([courseId, dayNumber])
+}
+
+// ----------------------------------------------------
+// 5. Versioned Lessons (Model 3) - Never Overwritten
+// ----------------------------------------------------
+model Lesson {
+  id                   String          @id @default(cuid())
+  courseId             String
+  dayPlanId            String
+  conceptId            String
+  currentVersionNumber Int             @default(1)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  course               Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayPlan              DayPlan         @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
+  concept              ConceptNode     @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  versions             LessonVersion[]
+}
+
+model LessonVersion {
+  id               String   @id @default(cuid())
+  lessonId         String
+  versionNumber    Int
+  markdownContent  String   // Complete educational workspace markdown + LaTeX math
+  generatedByModel String   @default("openai/gpt-oss-120b")
+  reasoning        String?  // Pedagogical notes
+  createdAt        DateTime @default(now())
+
+  lesson           Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, versionNumber])
+}
+
+// ----------------------------------------------------
+// 6. Spaced Revision (Model 4)
+// ----------------------------------------------------
+model RevisionNote {
+  id             String   @id @default(cuid())
+  courseId       String
+  dayPlanId      String?
+  conceptId      String
+  title          String
+  summary        String
+  keyFormulas    String?  // JSON array
+  keyPoints      String?  // JSON array
+  mistakeTarget  String?
+  createdAt      DateTime @default(now())
+
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayPlan        DayPlan? @relation(fields: [dayPlanId], references: [id], onDelete: SetNull)
+  concept        ConceptNode @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------
+// 7. Diagnostic Assessment & Performance (Model 5)
+// ----------------------------------------------------
+model Quiz {
+  id             String         @id @default(cuid())
+  courseId       String
+  dayPlanId      String
+  conceptId      String
+  totalQuestions Int            @default(3)
+  createdAt      DateTime       @default(now())
+
+  course         Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayPlan        DayPlan        @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
+  concept        ConceptNode    @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  questions      QuizQuestion[]
+  attempts       QuizAttempt[]
+}
+
+model QuizQuestion {
+  id           String      @id @default(cuid())
+  quizId       String
+  questionText String
+  options      String      // JSON array of 4 options
+  correctIndex Int
+  explanation  String
+  conceptName  String?
+  createdAt    DateTime    @default(now())
+
+  quiz         Quiz        @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id              String   @id @default(cuid())
+  quizId          String
+  scorePercentage Int
+  totalQuestions  Int      @default(3)
+  correctCount    Int
+  userAnswers     String   // JSON string of user option selections: { "qId": index }
+  completedAt     DateTime @default(now())
+
+  quiz            Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model MistakeLog {
+  id             String   @id @default(cuid())
+  userId         String
+  courseId       String
+  dayPlanId      String?
+  conceptId      String
+  questionTitle  String
+  userAnswer     String
+  correctAnswer  String
+  errorType      String   @default("Conceptual Misunderstanding")
+  severity       String   @default("medium") // "high" | "medium" | "low"
+  likelyCause    String
+  adaptiveAction String
+  resolved       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayPlan        DayPlan? @relation(fields: [dayPlanId], references: [id], onDelete: SetNull)
+  concept        ConceptNode @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------
+// 8. User Activity Timeline & Streak Verification
+// ----------------------------------------------------
+model UserActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  courseId     String?
+  activityType String   // "lesson_completed" | "quiz_passed" | "revision_read" | "course_started"
+  title        String
+  details      String?
+  score        Int?
+  timestamp    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course       Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+}
+
