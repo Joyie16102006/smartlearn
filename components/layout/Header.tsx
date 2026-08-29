@@ -10,14 +10,29 @@ import {
   Plus,
 } from "lucide-react";
 import { mockUserProfile } from "@/data/mockData";
+import { useSidebar } from "@/components/layout/SidebarContext";
 
 export const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isCollapsed, toggleSidebar } = useSidebar();
 
   return (
     <header className="h-14 border-b border-zinc-200 bg-white sticky top-0 z-10 px-6 flex items-center justify-between">
-      {/* Left: Search Bar & Mobile toggle */}
+      {/* Left: SmartLearn toggle when collapsed + Search Bar & Mobile toggle */}
       <div className="flex items-center gap-3 flex-1 max-w-md">
+        {isCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            title="Open SmartLearn Sidebar"
+            className="flex items-center gap-1.5 px-2 py-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded-sm text-xs font-semibold text-zinc-900 transition-colors shrink-0 cursor-pointer shadow-2xs group"
+          >
+            <div className="w-4 h-4 rounded-xs bg-zinc-900 group-hover:bg-zinc-800 flex items-center justify-center text-white font-bold text-[9px]">
+              SL
+            </div>
+            <span className="font-semibold tracking-tight text-zinc-900 hidden sm:inline">SmartLearn</span>
+          </button>
+        )}
+
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="md:hidden p-1.5 rounded-md text-zinc-600 hover:bg-zinc-100 transition-colors"

@@ -23,6 +23,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSidebar } from "@/components/layout/SidebarContext";
 
 interface DayLearningViewProps {
   day: DayPlan;
@@ -59,6 +60,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
   onCompleteDay,
   onBack,
 }) => {
+  const { isCollapsed, toggleSidebar } = useSidebar();
   const [selectedExplanation, setSelectedExplanation] = useState<ExplanationData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
@@ -229,11 +231,31 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
     setCheckedTopics((prev) => ({ ...prev, [idx]: !prev[idx] }));
 
   return (
-    <div className="fixed inset-0 left-56 flex flex-col bg-zinc-50 z-30">
-
+    <div
+      className={cn(
+        "fixed inset-0 flex flex-col bg-zinc-50 z-30 transition-all duration-300 ease-in-out",
+        isCollapsed ? "left-0" : "left-56"
+      )}
+    >
       {/* ── FIXED TOP HEADER ── */}
       <div className="flex-none flex items-center justify-between gap-4 px-5 py-3 bg-white border-b border-zinc-200">
         <div className="flex items-center gap-3 min-w-0">
+          {isCollapsed && (
+            <>
+              <button
+                onClick={toggleSidebar}
+                title="Open SmartLearn Sidebar"
+                className="flex items-center gap-1.5 px-2 py-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded-sm text-xs font-semibold text-zinc-900 transition-colors shrink-0 cursor-pointer shadow-2xs group"
+              >
+                <div className="w-4 h-4 rounded-xs bg-zinc-900 group-hover:bg-zinc-800 flex items-center justify-center text-white font-bold text-[9px]">
+                  SL
+                </div>
+                <span className="font-semibold tracking-tight text-zinc-900">SmartLearn</span>
+              </button>
+              <div className="h-4 w-px bg-zinc-200 shrink-0" />
+            </>
+          )}
+
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950 transition-colors shrink-0 cursor-pointer"
