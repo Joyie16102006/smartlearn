@@ -175,15 +175,38 @@ export async function POST(req: Request) {
       sourceContext: extractedContext,
     });
 
-    const courseId = title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + `-${Date.now().toString().slice(-4)}`;
+    const baseSlug = (title || "new-course").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30);
+    const courseId = `${baseSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-    // 3. Save Course in Supabase database
+    // 3. Build unique scoped IDs for each concept node to prevent Postgres unique constraint collisions
+    const conceptIdMap = new Map<string, string>();
+    const scopedConcepts = curriculum.concepts.map((c, idx) => {
+      const originalId = c.id || `concept-${idx + 1}`;
+      const nodeSlug = (c.slug || c.name || "topic").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 25);
+      const scopedId = `${courseId}-c${idx + 1}-${nodeSlug}`;
+      conceptIdMap.set(originalId, scopedId);
+      return {
+        ...c,
+        id: scopedId,
+      };
+    });
+
+    // Remap day plans to their valid scoped concept IDs
+    const scopedDaysList = curriculum.daysList.map((d) => {
+      const mappedConceptId = conceptIdMap.get(d.conceptId) || scopedConcepts[0]?.id || `${courseId}-c1-foundations`;
+      return {
+        ...d,
+        conceptId: mappedConceptId,
+      };
+    });
+
+    // 4. Save Course in Supabase database
     const course = await prisma.course.create({
       data: {
         id: courseId,
         userId: user.id,
         title: title || "New Course",
-        category: curriculum.category,
+        category: curriculum.category || "Technical Engineering",
         goal: goal || "Achieve complete topic mastery",
         currentLevel: level || "Intermediate",
         totalDays: totalDays,
@@ -191,9 +214,9 @@ export async function POST(req: Request) {
         progressPercentage: 0,
         minutesPerDay: minutesPerDay,
         preferredTime: "06:00 PM",
-        currentTopic: curriculum.daysList[0]?.title || "Foundations",
+        currentTopic: scopedDaysList[0]?.title || "Foundations",
         nextSessionTime: "Tomorrow at 06:00 PM",
-        nextSessionTopic: curriculum.daysList[1]?.title || "Core Architecture",
+        nextSessionTopic: scopedDaysList[1]?.title || "Core Architecture",
         description: curriculum.description,
         materialsCount: sourceRecords.length || 1,
         streakDays: 0,
@@ -207,7 +230,7 @@ export async function POST(req: Request) {
           })),
         },
         concepts: {
-          create: curriculum.concepts.map((c) => ({
+          create: scopedConcepts.map((c) => ({
             id: c.id,
             name: c.name,
             slug: c.slug,
@@ -222,7 +245,7 @@ export async function POST(req: Request) {
           })),
         },
         daysList: {
-          create: curriculum.daysList.map((d) => ({
+          create: scopedDaysList.map((d) => ({
             dayNumber: d.dayNumber,
             title: d.title,
             conceptId: d.conceptId,
