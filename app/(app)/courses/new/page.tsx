@@ -18,24 +18,19 @@ import {
 
 export default function NewCoursePage() {
   const router = useRouter();
-  const [courseName, setCourseName] = useState("Digital Electronics");
-  const [learningGoal, setLearningGoal] = useState("Master foundational combinational & sequential digital design in 30 days");
+  const [courseName, setCourseName] = useState("");
+  const [learningGoal, setLearningGoal] = useState("");
   const [level, setLevel] = useState<"Beginner" | "Intermediate" | "Advanced">("Beginner");
   const [days, setDays] = useState(30);
   const [minutesPerDay, setMinutesPerDay] = useState(60);
   const [preferredTime, setPreferredTime] = useState("6:00 PM");
 
   // Multi-link support
-  const [links, setLinks] = useState<string[]>([
-    "https://youtube.com/playlist?list=PLBlnK6fEyqRjMH3mWf6kwqiTbT798eAOm"
-  ]);
+  const [links, setLinks] = useState<string[]>([]);
   const [newLinkInput, setNewLinkInput] = useState("");
 
   // Uploaded files list
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([
-    "Digital_Design_Morris_Mano.pdf",
-    "Lecture_Notes_Unit1_Unit3.pptx"
-  ]);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
