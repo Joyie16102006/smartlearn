@@ -12,6 +12,7 @@ export async function GET() {
     const courses = await prisma.course.findMany({
       include: {
         concepts: true,
+        sources: true,
         daysList: {
           orderBy: { dayNumber: "asc" },
         },
@@ -81,28 +82,64 @@ export async function GET() {
 
 /**
  * POST /api/courses
- * Creates a new course via AI Model 1 & Model 2, and saves it into the database.
+ * Creates a new course via AI Curriculum Engine, and saves it into the Supabase database.
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { title, goal, level, totalDays, minutesPerDay, sources, files } = body;
 
-    const defaultUser = await prisma.user.findFirst();
-    if (!defaultUser) {
-      throw new Error("No user found in database. Run database seed first.");
+    let user = await prisma.user.findFirst();
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: "user-default",
+          name: "Learner",
+          email: "user@smartlearn.ai",
+        },
+      });
     }
 
-    // 1. Process sources via Model 1 (RAG Service)
+    // 1. Process sources and files
     let extractedContext = "";
+    const sourceRecords: Array<{
+      type: string;
+      title: string;
+      url?: string;
+      fileName?: string;
+      extractedText?: string;
+    }> = [];
+
     if (sources && Array.isArray(sources) && sources.length > 0) {
       for (const url of sources) {
-        const processed = RAGService.processSourceContent(url, "url", `Syllabus reference from ${url}`);
-        extractedContext += `\nSource: ${url}\nKey Topics: ${processed.keyTopics.join(", ")}\n`;
+        if (typeof url === "string" && url.trim()) {
+          const processed = RAGService.processSourceContent(url, "url", `Syllabus reference from ${url}`);
+          extractedContext += `\nSource: ${url}\nKey Topics: ${processed.keyTopics.join(", ")}\n`;
+          sourceRecords.push({
+            type: "url",
+            title: url.replace(/^https?:\/\//, "").slice(0, 50),
+            url: url,
+            extractedText: `Key Topics: ${processed.keyTopics.join(", ")}`,
+          });
+        }
       }
     }
 
-    // 2. Generate Curriculum & DAG via Model 2
+    if (files && Array.isArray(files) && files.length > 0) {
+      for (const fileName of files) {
+        if (typeof fileName === "string" && fileName.trim()) {
+          extractedContext += `\nUploaded Syllabus Document: ${fileName}\n`;
+          sourceRecords.push({
+            type: fileName.endsWith(".pdf") ? "file" : "document",
+            title: fileName,
+            fileName: fileName,
+            extractedText: `Uploaded syllabus document: ${fileName}`,
+          });
+        }
+      }
+    }
+
+    // 2. Generate Curriculum & DAG via AI
     const curriculum = await CurriculumService.generateCurriculum({
       title: title || "New Technical Course",
       goal: goal || "Comprehensive mastery of foundational and applied principles",
@@ -114,11 +151,11 @@ export async function POST(req: Request) {
 
     const courseId = (title || "new-course").toLowerCase().replace(/[^a-z0-9]+/g, "-") + `-${Date.now().toString().slice(-4)}`;
 
-    // 3. Save Course in Prisma database
+    // 3. Save Course in Supabase database
     const course = await prisma.course.create({
       data: {
         id: courseId,
-        userId: defaultUser.id,
+        userId: user.id,
         title: title || "New Course",
         category: curriculum.category,
         goal: goal || "Achieve complete topic mastery",
@@ -132,8 +169,17 @@ export async function POST(req: Request) {
         nextSessionTime: "Tomorrow at 06:00 PM",
         nextSessionTopic: curriculum.daysList[1]?.title || "Core Architecture",
         description: curriculum.description,
-        materialsCount: (sources?.length || 0) + (files?.length || 0) + 1,
+        materialsCount: sourceRecords.length || 1,
         streakDays: 0,
+        sources: {
+          create: sourceRecords.map((s) => ({
+            type: s.type,
+            title: s.title,
+            url: s.url,
+            fileName: s.fileName,
+            extractedText: s.extractedText,
+          })),
+        },
         concepts: {
           create: curriculum.concepts.map((c) => ({
             id: c.id,
@@ -163,7 +209,15 @@ export async function POST(req: Request) {
       include: {
         concepts: true,
         daysList: true,
+        sources: true,
       },
+    });
+
+    // Update user active courses count in database
+    const activeCount = await prisma.course.count({ where: { userId: user.id } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { activeCoursesCount: activeCount },
     });
 
     return NextResponse.json(course, { status: 201 });
@@ -172,4 +226,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message || "Failed to create course" }, { status: 500 });
   }
 }
-
