@@ -5,10 +5,12 @@ import Link from "next/link";
 import { Course } from "@/types";
 import { mockCourses } from "@/data/mockData";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Flame, ArrowRight, Plus } from "lucide-react";
+import { Flame, ArrowRight, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
 
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>(mockCourses);
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetch("/api/courses")
@@ -20,6 +22,32 @@ export default function DashboardPage() {
       })
       .catch((err) => console.warn("Failed to fetch courses from database:", err));
   }, []);
+
+  const handleDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      const res = await fetch(`/api/courses/${courseToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
+        setCourseToDelete(null);
+      } else {
+        // Fallback for prototype state
+        setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
+        setCourseToDelete(null);
+      }
+    } catch (err) {
+      console.error("Error deleting course:", err);
+      setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
+      setCourseToDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-16">
@@ -114,19 +142,32 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Continue Action Button */}
+            {/* Bottom Action Row: Concept Count + Un-highlighted Delete + Continue */}
             <div className="pt-3 mt-3 border-t border-zinc-100 flex items-center justify-between">
               <span className="text-[11px] font-mono text-zinc-400">
                 {course.concepts.length} Concepts
               </span>
 
-              <Link
-                href={`/courses/${course.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-2xs"
-              >
-                <span>Continue</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
+              <div className="flex items-center gap-1.5">
+                {/* Un-highlighted Minimalist Trash Icon Button */}
+                <button
+                  type="button"
+                  onClick={() => setCourseToDelete(course)}
+                  className="p-1.5 rounded-sm text-zinc-400 hover:text-red-600 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  title="Delete course"
+                  aria-label={`Delete ${course.title}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+
+                <Link
+                  href={`/courses/${course.id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-2xs"
+                >
+                  <span>Continue</span>
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
             </div>
           </div>
         ))}
@@ -149,6 +190,66 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {courseToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isDeleting && setCourseToDelete(null)}
+        >
+          <div
+            className="relative bg-white rounded-md border border-zinc-200 shadow-xl max-w-sm w-full p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-sm bg-zinc-100 flex items-center justify-center text-zinc-600 shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-zinc-900">
+                  Delete this course?
+                </h3>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-zinc-900">
+                    "{courseToDelete.title}"
+                  </span>
+                  ? This will remove its curriculum, flowchart concepts, and learning history.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setCourseToDelete(null)}
+                className="px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteCourse}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-sm shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Course</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

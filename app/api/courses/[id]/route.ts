@@ -96,6 +96,7 @@ export async function DELETE(req: Request, { params }: Params) {
     await prisma.course.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("DELETE /api/courses/[id] error:", error);
     return NextResponse.json({ error: error.message || "Failed to delete course" }, { status: 500 });
   }
 }
