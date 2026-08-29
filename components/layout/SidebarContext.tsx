@@ -55,3 +55,4 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 export const useSidebar = () => useContext(SidebarContext);
+

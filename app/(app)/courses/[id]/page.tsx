@@ -122,20 +122,22 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
     >
       {/* ── FIXED TOP HEADER BAR ── */}
       <div className="flex-none flex items-center justify-between gap-4 px-5 py-3 bg-white border-b border-zinc-200">
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           {isCollapsed && (
             <>
               <button
                 onClick={toggleSidebar}
                 title="Open SmartLearn Sidebar"
-                className="flex items-center gap-1.5 px-2 py-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded-sm text-xs font-semibold text-zinc-900 transition-colors shrink-0 cursor-pointer shadow-2xs group"
+                className="flex items-center gap-2 text-xs font-semibold text-zinc-900 hover:opacity-80 transition-opacity shrink-0 cursor-pointer"
               >
-                <div className="w-4 h-4 rounded-xs bg-zinc-900 group-hover:bg-zinc-800 flex items-center justify-center text-white font-bold text-[9px]">
+                <div className="w-5 h-5 rounded-xs bg-zinc-900 flex items-center justify-center text-white font-bold text-[10px] shadow-2xs">
                   SL
                 </div>
-                <span className="font-semibold tracking-tight text-zinc-900">SmartLearn</span>
+                <span className="font-semibold text-xs tracking-tight text-zinc-900">
+                  SmartLearn
+                </span>
               </button>
-              <div className="h-4 w-px bg-zinc-200 shrink-0" />
+              <div className="h-4 w-px bg-zinc-200 shrink-0 mx-1" />
             </>
           )}
 
@@ -146,7 +148,7 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
             <ArrowLeft className="w-4 h-4" />
             <span>Back</span>
           </Link>
-          <div className="h-4 w-px bg-zinc-200 shrink-0" />
+          <div className="h-4 w-px bg-zinc-200 shrink-0 mx-1" />
           <div className="min-w-0">
             <span className="text-[10px] font-mono uppercase text-zinc-400 block leading-none">
               Course Dashboard
