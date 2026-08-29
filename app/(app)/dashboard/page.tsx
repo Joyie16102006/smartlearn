@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Course } from "@/types";
-import { mockCourses } from "@/data/mockData";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Flame, ArrowRight, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Flame, ArrowRight, Plus, Trash2, Loader2, BookOpen } from "lucide-react";
 
 export default function DashboardPage() {
-  const [courses, setCourses] = useState<Course[]>(mockCourses);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -16,11 +16,12 @@ export default function DashboardPage() {
     fetch("/api/courses")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setCourses(data);
         }
       })
-      .catch((err) => console.warn("Failed to fetch courses from database:", err));
+      .catch((err) => console.warn("Failed to fetch courses from database:", err))
+      .finally(() => setIsLoading(false));
   }, []);
 
   const handleDeleteCourse = async () => {
@@ -36,7 +37,6 @@ export default function DashboardPage() {
         setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
         setCourseToDelete(null);
       } else {
-        // Fallback for prototype state
         setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
         setCourseToDelete(null);
       }
@@ -71,125 +71,155 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* ── COURSE-WISE STREAK BADGES ROW (Clean, Professional & Sharp) ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        {courses.map((course) => (
-          <div
-            key={course.id}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-zinc-200 bg-zinc-50 text-xs text-zinc-700 font-mono"
-          >
-            <Flame className="w-3 h-3 text-zinc-600" />
-            <span className="font-semibold text-zinc-900 truncate max-w-[140px]">
-              {course.title}:
-            </span>
-            <span className="text-zinc-600">
-              {course.streakDays || 7}d streak
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── COURSES CARDS GRID (Sharp, Clean & Professional) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
-        {courses.map((course) => (
-          <div
-            key={course.id}
-            className="relative bg-white rounded-md border border-zinc-200 p-5 flex flex-col justify-between hover:border-zinc-400 transition-colors group min-h-[220px]"
-          >
-            {/* Top-Left Corner Fold Tag (Sharp minimalist fold) */}
-            <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-zinc-900" />
-
-            <div className="space-y-3">
-              {/* Header Row: Category & Streak */}
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block">
-                    {course.category.split("&")[0].trim()}
-                  </span>
-                  {/* Course Name */}
-                  <h3 className="text-sm font-semibold text-zinc-900 group-hover:text-black transition-colors mt-0.5 leading-snug">
-                    {course.title}
-                  </h3>
-                </div>
-
-                {/* Course Streak Badge */}
-                <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border border-zinc-200 bg-zinc-50 text-[11px] font-mono text-zinc-700">
-                  <Flame className="w-3 h-3 text-zinc-600" />
-                  <span>{course.streakDays || 7}d</span>
-                </div>
-              </div>
-
-              {/* Course Goal */}
-              <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
-                {course.goal}
-              </p>
-
-              {/* Progress Section */}
-              <div className="bg-zinc-50 rounded-sm p-3 space-y-1.5 border border-zinc-200/60">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-zinc-600 font-medium">
-                    Day {course.currentDay} of {course.totalDays}
-                  </span>
-                  <span className="font-mono font-semibold text-zinc-900">
-                    {course.progressPercentage}% Complete
-                  </span>
-                </div>
-                <ProgressBar
-                  value={course.progressPercentage}
-                  size="sm"
-                  color="neutral"
-                />
-              </div>
-            </div>
-
-            {/* Bottom Action Row: Concept Count + Un-highlighted Delete + Continue */}
-            <div className="pt-3 mt-3 border-t border-zinc-100 flex items-center justify-between">
-              <span className="text-[11px] font-mono text-zinc-400">
-                {course.concepts.length} Concepts
+      {/* ── COURSE-WISE STREAK BADGES ROW (Only if courses exist) ── */}
+      {courses.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {courses.map((course) => (
+            <div
+              key={course.id}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-zinc-200 bg-zinc-50 text-xs text-zinc-700 font-mono"
+            >
+              <Flame className="w-3 h-3 text-zinc-600" />
+              <span className="font-semibold text-zinc-900 truncate max-w-[140px]">
+                {course.title}:
               </span>
+              <span className="text-zinc-600">
+                {course.streakDays || 0}d streak
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
-              <div className="flex items-center gap-1.5">
-                {/* Un-highlighted Minimalist Trash Icon Button */}
-                <button
-                  type="button"
-                  onClick={() => setCourseToDelete(course)}
-                  className="p-1.5 rounded-sm text-zinc-400 hover:text-red-600 hover:bg-zinc-100 transition-colors cursor-pointer"
-                  title="Delete course"
-                  aria-label={`Delete ${course.title}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+      {/* ── COURSES CARDS GRID ── */}
+      {isLoading ? (
+        <div className="p-12 text-center text-xs text-zinc-400 font-mono flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
+          <span>Loading courses...</span>
+        </div>
+      ) : courses.length === 0 ? (
+        <div className="bg-white rounded-md border border-zinc-200 p-12 text-center space-y-4 max-w-md mx-auto my-8 shadow-2xs">
+          <div className="w-12 h-12 rounded-sm bg-zinc-100 flex items-center justify-center mx-auto text-zinc-500">
+            <BookOpen className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-zinc-900">
+              No courses created yet
+            </h3>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Add your syllabus, topics, or YouTube/article links to generate your first adaptive AI curriculum and flowchart.
+            </p>
+          </div>
+          <Link
+            href="/courses/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Create First Course</span>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+          {courses.map((course) => (
+            <div
+              key={course.id}
+              className="relative bg-white rounded-md border border-zinc-200 p-5 flex flex-col justify-between hover:border-zinc-400 transition-colors group min-h-[220px]"
+            >
+              {/* Top-Left Corner Fold Tag */}
+              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-zinc-900" />
 
-                <Link
-                  href={`/courses/${course.id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-2xs"
-                >
-                  <span>Continue</span>
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
+              <div className="space-y-3">
+                {/* Header Row: Category & Streak */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block">
+                      {course.category?.split("&")[0]?.trim() || "Technical Track"}
+                    </span>
+                    {/* Course Name */}
+                    <h3 className="text-sm font-semibold text-zinc-900 group-hover:text-black transition-colors mt-0.5 leading-snug">
+                      {course.title}
+                    </h3>
+                  </div>
+
+                  {/* Course Streak Badge */}
+                  <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border border-zinc-200 bg-zinc-50 text-[11px] font-mono text-zinc-700">
+                    <Flame className="w-3 h-3 text-zinc-600" />
+                    <span>{course.streakDays || 0}d</span>
+                  </div>
+                </div>
+
+                {/* Course Goal */}
+                <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                  {course.goal}
+                </p>
+
+                {/* Progress Section */}
+                <div className="bg-zinc-50 rounded-sm p-3 space-y-1.5 border border-zinc-200/60">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-600 font-medium">
+                      Day {course.currentDay} of {course.totalDays}
+                    </span>
+                    <span className="font-mono font-semibold text-zinc-900">
+                      {course.progressPercentage}% Complete
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={course.progressPercentage}
+                    size="sm"
+                    color="neutral"
+                  />
+                </div>
+              </div>
+
+              {/* Bottom Action Row: Concept Count + Un-highlighted Delete + Continue */}
+              <div className="pt-3 mt-3 border-t border-zinc-100 flex items-center justify-between">
+                <span className="text-[11px] font-mono text-zinc-400">
+                  {course.concepts?.length || 0} Concepts
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  {/* Un-highlighted Minimalist Trash Icon Button */}
+                  <button
+                    type="button"
+                    onClick={() => setCourseToDelete(course)}
+                    className="p-1.5 rounded-sm text-zinc-400 hover:text-red-600 hover:bg-zinc-100 transition-colors cursor-pointer"
+                    title="Delete course"
+                    aria-label={`Delete ${course.title}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <Link
+                    href={`/courses/${course.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-2xs"
+                  >
+                    <span>Continue</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* ── BIG [+] ADD COURSE CARD (Sharp, Minimalist) ── */}
-        <Link
-          href="/courses/new"
-          className="bg-zinc-50/50 hover:bg-zinc-100/60 rounded-md border border-dashed border-zinc-300 hover:border-zinc-900 transition-colors p-6 flex flex-col items-center justify-center gap-2.5 min-h-[220px] group cursor-pointer text-center"
-        >
-          <div className="w-10 h-10 rounded-sm bg-white border border-zinc-200 group-hover:border-zinc-900 flex items-center justify-center text-zinc-500 group-hover:text-zinc-900 transition-colors shadow-2xs">
-            <Plus className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs font-semibold text-zinc-800 group-hover:text-zinc-950 transition-colors block">
-              Add Course
-            </span>
-            <span className="text-[11px] text-zinc-400 mt-0.5 block font-mono">
-              Build curriculum & flowchart
-            </span>
-          </div>
-        </Link>
-      </div>
+          {/* ── BIG [+] ADD COURSE CARD ── */}
+          <Link
+            href="/courses/new"
+            className="bg-zinc-50/50 hover:bg-zinc-100/60 rounded-md border border-dashed border-zinc-300 hover:border-zinc-900 transition-colors p-6 flex flex-col items-center justify-center gap-2.5 min-h-[220px] group cursor-pointer text-center"
+          >
+            <div className="w-10 h-10 rounded-sm bg-white border border-zinc-200 group-hover:border-zinc-900 flex items-center justify-center text-zinc-500 group-hover:text-zinc-900 transition-colors shadow-2xs">
+              <Plus className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-zinc-800 group-hover:text-zinc-950 transition-colors block">
+                Add Course
+              </span>
+              <span className="text-[11px] text-zinc-400 mt-0.5 block font-mono">
+                Build curriculum & flowchart
+              </span>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* ── DELETE CONFIRMATION MODAL ── */}
       {courseToDelete && (

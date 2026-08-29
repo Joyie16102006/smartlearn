@@ -1,8 +1,7 @@
 "use client";
 
-import React, { use, useState } from "react";
+import React, { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { mockCourses } from "@/data/mockData";
 import { CourseFlowchart } from "@/components/courses/CourseFlowchart";
 import { DayLearningView } from "@/components/learning/DayLearningView";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -14,9 +13,11 @@ import {
   Flame,
   Brain,
   Play,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConceptNode } from "@/types";
+import { Course, ConceptNode, DayPlan } from "@/types";
 import { useSidebar } from "@/components/layout/SidebarContext";
 
 interface CourseOverviewPageProps {
@@ -27,16 +28,15 @@ interface CourseOverviewPageProps {
 
 export default function CourseOverviewPage({ params }: CourseOverviewPageProps) {
   const resolvedParams = use(params);
-  const { isCollapsed, toggleSidebar } = useSidebar();
-  const initialCourse =
-    mockCourses.find((c) => c.id === resolvedParams.id) || mockCourses[0];
+  const { isCollapsed } = useSidebar();
 
-  const [course, setCourse] = useState(initialCourse);
-  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(course.currentDay);
+  const [course, setCourse] = useState<Course | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(1);
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [isDaySessionActive, setIsDaySessionActive] = useState<boolean>(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetch(`/api/courses/${resolvedParams.id}`)
       .then((res) => res.json())
       .then((data) => {
@@ -45,59 +45,85 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
           setSelectedDayNumber(data.currentDay || 1);
         }
       })
-      .catch((err) => console.warn("Failed to load course from DB:", err));
+      .catch((err) => console.warn("Failed to load course from DB:", err))
+      .finally(() => setIsLoading(false));
   }, [resolvedParams.id]);
 
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-zinc-50 z-30">
+        <div className="text-center space-y-2">
+          <Loader2 className="w-6 h-6 animate-spin text-zinc-800 mx-auto" />
+          <p className="text-xs text-zinc-500 font-mono">Loading course curriculum & flowchart...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="max-w-md mx-auto my-20 bg-white rounded-md border border-zinc-200 p-8 text-center space-y-4 shadow-2xs">
+        <AlertCircle className="w-8 h-8 text-zinc-400 mx-auto" />
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold text-zinc-900">Course Not Found</h2>
+          <p className="text-xs text-zinc-500">The requested course does not exist or has been deleted.</p>
+        </div>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-medium transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Dashboard</span>
+        </Link>
+      </div>
+    );
+  }
+
   // Active day object
-  const activeDay =
+  const activeDay: DayPlan =
     course.daysList?.find((d) => d.dayNumber === selectedDayNumber) ||
     course.daysList?.[0] || {
-      dayNumber: 8,
-      title: "Multiplexers (4:1 & 8:1 MUX Architectures)",
-      conceptId: "c-mux",
+      dayNumber: 1,
+      title: "Course Foundations",
+      conceptId: course.concepts?.[0]?.id || "c-1",
       status: "current" as const,
-      topicsCovered: [
-        "Multiplexer data routing & select lines rule",
-        "4:1 MUX Boolean equation & AND-OR synthesis",
-        "Active-low enable input control (EN)",
-      ],
+      topicsCovered: ["Fundamental Core Principles"],
       durationMinutes: 60,
     };
 
   // Active concept for right-panel inspector
-  const activeConcept: ConceptNode =
-    course.concepts.find((c) => c.id === selectedConceptId) ||
-    course.concepts.find((c) => c.id === activeDay.conceptId) ||
-    course.concepts[0];
+  const activeConcept: ConceptNode | undefined =
+    course.concepts?.find((c) => c.id === selectedConceptId) ||
+    course.concepts?.find((c) => c.id === activeDay.conceptId) ||
+    course.concepts?.[0];
 
   const handleCompleteDay = (dayNum: number, score: number) => {
     setCourse((prev) => {
+      if (!prev) return prev;
       const updatedDays = prev.daysList?.map((d) =>
         d.dayNumber === dayNum ? { ...d, status: "completed" as const, quizScore: score } : d
       );
       const matchingDay = prev.daysList?.find((d) => d.dayNumber === dayNum);
       const conceptIdToUpdate = matchingDay?.conceptId;
-      const updatedConcepts = prev.concepts.map((c) =>
+      const updatedConcepts = prev.concepts?.map((c) =>
         c.id === conceptIdToUpdate
           ? { ...c, status: "completed" as const, masteryPercentage: Math.max(c.masteryPercentage, score) }
           : c
       );
       return {
         ...prev,
-        daysList: updatedDays,
-        concepts: updatedConcepts,
+        daysList: updatedDays || [],
+        concepts: updatedConcepts || [],
         progressPercentage: Math.min(100, prev.progressPercentage + 3),
       };
     });
   };
 
-  // Open Day session when tapping any day (especially today's highlighted one)
   const handleDayClick = (dayNumber: number) => {
     setSelectedDayNumber(dayNumber);
     setIsDaySessionActive(true);
   };
 
-  // Day session is fixed-position overlay (handled by DayLearningView itself)
   if (isDaySessionActive) {
     return (
       <DayLearningView
@@ -112,7 +138,6 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
     );
   }
 
-  // ── COURSE DASHBOARD: fixed overlay, 3 independent scrollable panels ──
   return (
     <div
       className={cn(
@@ -140,213 +165,241 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1 px-2.5 py-1 border border-zinc-200 bg-zinc-50 text-xs font-mono text-zinc-800">
-            <Flame className="w-3.5 h-3.5 text-zinc-700" />
-            <span>{course.streakDays || 7}d streak</span>
+        <div className="flex items-center gap-4 shrink-0">
+          {/* Progress bar glance */}
+          <div className="hidden sm:flex items-center gap-3">
+            <span className="text-xs font-medium text-zinc-500">
+              Day {course.currentDay} of {course.totalDays}
+            </span>
+            <div className="w-24">
+              <ProgressBar
+                value={course.progressPercentage}
+                size="sm"
+                color="neutral"
+              />
+            </div>
+            <span className="text-xs font-mono font-semibold text-zinc-900">
+              {course.progressPercentage}%
+            </span>
           </div>
-          <div className="flex items-center gap-1 px-2.5 py-1 border border-zinc-900 bg-zinc-900 text-xs font-mono text-white">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Day {course.currentDay} of {course.totalDays}</span>
-          </div>
+
+          {/* Primary Action Button */}
           <button
-            onClick={() => {
-              setSelectedDayNumber(course.currentDay);
-              setIsDaySessionActive(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors cursor-pointer"
+            onClick={() => handleDayClick(course.currentDay)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
-            <Play className="w-3 h-3 fill-current" />
-            <span>Launch Day {course.currentDay}</span>
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Start Day {course.currentDay}</span>
           </button>
         </div>
       </div>
 
-      {/* ── 3-PANEL BODY (fills remaining height, each scrolls independently) ── */}
-      <div className="flex-1 flex overflow-hidden">
-
-        {/* ── LEFT PANEL: Day-Wise Schedule ── */}
-        <div className="w-64 flex-none flex flex-col overflow-y-auto border-r border-zinc-200 bg-white">
-          <div className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-900">Day-Wise Schedule</span>
-              <span className="text-[10px] font-mono text-zinc-400">{course.totalDays} Days</span>
-            </div>
-
-            <div className="space-y-1">
-              {course.daysList?.map((d) => {
-                const isCompleted = d.status === "completed";
-                const isToday = d.dayNumber === course.currentDay;
-                const isSelected = selectedDayNumber === d.dayNumber;
-
-                return (
-                  <button
-                    key={d.dayNumber}
-                    onClick={() => handleDayClick(d.dayNumber)}
-                    className={cn(
-                      "w-full text-left px-2.5 py-2 border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer",
-                      isToday
-                        ? "bg-zinc-900 text-white border-zinc-900 font-medium"
-                        : isSelected
-                        ? "bg-zinc-100 border-zinc-400 text-zinc-950 font-semibold"
-                        : isCompleted
-                        ? "bg-emerald-50/70 border-emerald-300 text-emerald-950 hover:bg-emerald-50"
-                        : "bg-white border-zinc-200 text-zinc-500 hover:border-zinc-300"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : isToday ? (
-                        <div className="w-2 h-2 rounded-full bg-white shrink-0 animate-ping" />
-                      ) : (
-                        <Lock className="w-3 h-3 text-zinc-300 shrink-0" />
-                      )}
-                      <span className="truncate text-[11px]">
-                        {d.dayNumber}: {d.title.split(":")[0].replace(/^Day\s+\d+:\s*/, "")}
-                      </span>
-                    </div>
-
-                    {isCompleted && d.quizScore ? (
-                      <span className="font-mono text-[10px] shrink-0 font-semibold opacity-80">
-                        {d.quizScore}%
-                      </span>
-                    ) : isToday ? (
-                      <span className="text-[9px] font-mono uppercase bg-white text-zinc-900 px-1 py-0.5 shrink-0 font-bold">
-                        TODAY
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
+      {/* ── 3-COLUMN MAIN BODY ── */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {/* ── LEFT PANEL: 30-Day Schedule Outline ── */}
+        <div className="w-72 flex-none border-r border-zinc-200 bg-white flex flex-col overflow-hidden">
+          <div className="p-3.5 border-b border-zinc-100 flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-zinc-900 uppercase font-mono tracking-wider">
+              Curriculum Schedule
+            </h2>
+            <span className="text-[11px] font-mono text-zinc-400">
+              {course.totalDays} Days
+            </span>
           </div>
-        </div>
 
-        {/* ── MIDDLE PANEL: Flowchart + Today Breakdown ── */}
-        <div className="flex-1 overflow-y-auto bg-zinc-50/40">
-          <div className="p-5 space-y-4">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {course.daysList?.map((day) => {
+              const isSelected = day.dayNumber === selectedDayNumber;
+              const isCurrent = day.dayNumber === course.currentDay;
+              const isCompleted = day.status === "completed";
 
-            {/* NotebookLM-Style Concept Flowchart */}
-            <CourseFlowchart
-              concepts={course.concepts}
-              onSelectConcept={(concept) => setSelectedConceptId(concept.id)}
-              onEnterDay={(dayNum) => {
-                setSelectedDayNumber(dayNum);
-                setIsDaySessionActive(true);
-              }}
-              selectedConceptId={selectedConceptId}
-            />
-
-            {/* Today's Session Breakdown */}
-            <div className="bg-white border border-zinc-200 p-4 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-zinc-400 block">
-                    Today's Session Breakdown
-                  </span>
-                  <h3 className="text-xs font-semibold text-zinc-900 mt-0.5">
-                    Day {activeDay.dayNumber}: {activeDay.title}
-                  </h3>
-                </div>
+              return (
                 <button
-                  onClick={() => setIsDaySessionActive(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors cursor-pointer"
+                  key={day.dayNumber}
+                  onClick={() => {
+                    setSelectedDayNumber(day.dayNumber);
+                    setSelectedConceptId(day.conceptId);
+                  }}
+                  className={cn(
+                    "w-full text-left p-2.5 rounded-sm transition-colors flex items-start gap-2.5 cursor-pointer",
+                    isSelected
+                      ? "bg-zinc-900 text-white shadow-2xs"
+                      : "hover:bg-zinc-100 text-zinc-800"
+                  )}
                 >
-                  <Play className="w-3 h-3 fill-current" />
-                  <span>Open Work</span>
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                {activeDay.topicsCovered.map((topic, idx) => (
-                  <div
-                    key={idx}
-                    className="px-3 py-2 bg-zinc-50 border border-zinc-200 text-xs text-zinc-700 font-mono flex items-start gap-2"
-                  >
-                    <span className="text-zinc-400 font-bold shrink-0">0{idx + 1}.</span>
-                    <span>{topic}</span>
+                  <div className="pt-0.5 shrink-0">
+                    {isCompleted ? (
+                      <CheckCircle2
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          isSelected ? "text-white" : "text-emerald-600"
+                        )}
+                      />
+                    ) : isCurrent ? (
+                      <div
+                        className={cn(
+                          "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center",
+                          isSelected ? "border-white" : "border-zinc-900"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            isSelected ? "bg-white" : "bg-zinc-900"
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <Lock
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          isSelected ? "text-zinc-300" : "text-zinc-400"
+                        )}
+                      />
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
 
-          </div>
-        </div>
-
-        {/* ── RIGHT PANEL: Concept Details + Topic Mastery ── */}
-        <div className="w-64 flex-none flex flex-col overflow-y-auto border-l border-zinc-200 bg-white">
-          <div className="p-4 space-y-4">
-
-            {/* Concept Details Inspector */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <span className="text-xs font-semibold text-zinc-900">Concept Details</span>
-                <span className="text-[10px] font-mono text-zinc-400">{activeConcept.difficulty}</span>
-              </div>
-
-              <h4 className="text-xs font-bold text-zinc-900">{activeConcept.name}</h4>
-              <p className="text-[11px] text-zinc-600 leading-relaxed">{activeConcept.description}</p>
-
-              {activeConcept.keyFormulas && activeConcept.keyFormulas.length > 0 && (
-                <div className="p-2.5 bg-zinc-50 border border-zinc-200 space-y-1">
-                  <span className="text-[9px] font-mono uppercase text-zinc-400 block font-semibold">
-                    Key Formula:
-                  </span>
-                  <div className="font-mono text-[11px] text-zinc-900 break-all">
-                    {activeConcept.keyFormulas[0]}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-zinc-100" />
-
-            {/* Topic Mastery Scores */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-zinc-900">Topic Mastery Scores</span>
-                <Brain className="w-3.5 h-3.5 text-zinc-400" />
-              </div>
-
-              <div className="space-y-2">
-                {course.concepts.map((concept) => {
-                  const isMastered = concept.status === "completed";
-                  const isSelected = activeConcept.id === concept.id;
-
-                  return (
-                    <div
-                      key={concept.id}
-                      onClick={() => setSelectedConceptId(concept.id)}
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={cn(
+                          "text-[10px] font-mono",
+                          isSelected ? "text-zinc-300" : "text-zinc-400"
+                        )}
+                      >
+                        Day {day.dayNumber}
+                      </span>
+                      {day.quizScore && (
+                        <span
+                          className={cn(
+                            "text-[10px] font-mono font-semibold",
+                            isSelected ? "text-emerald-300" : "text-emerald-600"
+                          )}
+                        >
+                          {day.quizScore}%
+                        </span>
+                      )}
+                    </div>
+                    <p
                       className={cn(
-                        "p-2.5 border transition-colors cursor-pointer space-y-1",
-                        isSelected
-                          ? "bg-zinc-100 border-zinc-400"
-                          : isMastered
-                          ? "bg-emerald-50/50 border-emerald-300"
-                          : "bg-white border-zinc-200 hover:border-zinc-300"
+                        "text-xs font-medium truncate",
+                        isSelected ? "text-white" : "text-zinc-900"
                       )}
                     >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-zinc-900 truncate pr-1 text-[11px]">
-                          {concept.name}
-                        </span>
-                        <span className={cn(
-                          "font-mono text-[10px] font-semibold shrink-0",
-                          isMastered ? "text-emerald-700" : "text-zinc-600"
-                        )}>
-                          {concept.masteryPercentage}%
-                        </span>
-                      </div>
-                      <ProgressBar value={concept.masteryPercentage} size="sm" color="neutral" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
+                      {day.title}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        {/* ── CENTER PANEL: Interactive DAG Flowchart ── */}
+        <div className="flex-1 bg-zinc-50 flex flex-col overflow-hidden relative">
+          <div className="p-3 border-b border-zinc-200 bg-white/70 backdrop-blur-xs flex items-center justify-between z-10">
+            <div>
+              <h3 className="text-xs font-semibold text-zinc-900">
+                Knowledge Dependency DAG
+              </h3>
+              <p className="text-[11px] text-zinc-500 font-mono">
+                Click concept nodes to inspect formulas, mastery, and topics
+              </p>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-xs bg-zinc-100 border border-zinc-200 text-zinc-700">
+              {course.concepts?.length || 0} Connected Concepts
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4">
+            <CourseFlowchart
+              concepts={course.concepts || []}
+              selectedConceptId={selectedConceptId}
+              onSelectConcept={(concept) => {
+                setSelectedConceptId(concept.id);
+                if (concept.dayAssigned) {
+                  setSelectedDayNumber(concept.dayAssigned);
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: Concept & Lesson Inspector ── */}
+        <div className="w-80 flex-none border-l border-zinc-200 bg-white flex flex-col overflow-hidden">
+          <div className="p-3.5 border-b border-zinc-100 flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-zinc-900 uppercase font-mono tracking-wider">
+              Concept Detail
+            </h2>
+            {activeConcept && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-xs bg-zinc-100 text-zinc-600">
+                {activeConcept.difficulty || "Intermediate"}
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {activeConcept ? (
+              <>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-zinc-900">
+                    {activeConcept.name}
+                  </h3>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    {activeConcept.description}
+                  </p>
+                </div>
+
+                {/* Mastery Level */}
+                <div className="p-3 bg-zinc-50 rounded-sm border border-zinc-200 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-600 font-medium">Concept Mastery</span>
+                    <span className="font-mono font-bold text-zinc-900">
+                      {activeConcept.masteryPercentage || 0}%
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={activeConcept.masteryPercentage || 0}
+                    size="sm"
+                    color="neutral"
+                  />
+                </div>
+
+                {/* Key Formulas */}
+                {activeConcept.keyFormulas && activeConcept.keyFormulas.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-mono uppercase text-zinc-400 block">
+                      Key Mathematical Formulas
+                    </span>
+                    <div className="space-y-1">
+                      {activeConcept.keyFormulas.map((f, i) => (
+                        <div
+                          key={i}
+                          className="p-2.5 rounded-sm bg-zinc-900 text-zinc-100 font-mono text-xs overflow-x-auto"
+                        >
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Start Day Button */}
+                <button
+                  onClick={() => handleDayClick(activeDay.dayNumber)}
+                  className="w-full py-2 px-3 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer mt-4"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Start Day {activeDay.dayNumber} Session</span>
+                </button>
+              </>
+            ) : (
+              <div className="text-center py-10 text-xs text-zinc-400 font-mono">
+                Select a concept or day to view details
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

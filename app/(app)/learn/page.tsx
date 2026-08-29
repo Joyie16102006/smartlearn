@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Course } from "@/types";
-import { mockCourses } from "@/data/mockData";
+import { Course, DayPlan } from "@/types";
 import { DayLearningView } from "@/components/learning/DayLearningView";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
@@ -11,12 +10,16 @@ import {
   Flame,
   ArrowRight,
   CheckCircle2,
+  BookOpen,
+  Plus,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function TodayPlanPage() {
-  const [courses, setCourses] = useState<Course[]>(mockCourses);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>("digital-electronics");
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [isDaySessionActive, setIsDaySessionActive] = useState<boolean>(false);
 
   useEffect(() => {
@@ -25,31 +28,54 @@ export default function TodayPlanPage() {
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setCourses(data);
-          if (!data.find((c: Course) => c.id === selectedCourseId)) {
-            setSelectedCourseId(data[0].id);
-          }
+          setSelectedCourseId(data[0].id);
         }
       })
-      .catch((err) => console.warn("Failed to fetch courses from database:", err));
-  }, [selectedCourseId]);
+      .catch((err) => console.warn("Failed to fetch courses from database:", err))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const activeCourse =
     courses.find((c) => c.id === selectedCourseId) || courses[0];
 
-  const activeDay =
-    activeCourse.daysList?.find((d) => d.dayNumber === activeCourse.currentDay) ||
-    activeCourse.daysList?.[0] || {
-      dayNumber: 8,
-      title: "Multiplexers (4:1 & 8:1 MUX Architectures)",
-      conceptId: "c-mux",
-      status: "current" as const,
-      topicsCovered: [
-        "Multiplexer data routing & select lines rule",
-        "4:1 MUX Boolean equation & AND-OR synthesis",
-        "Active-low enable input control (EN)",
-      ],
-      durationMinutes: 60,
-    };
+  const activeDay: DayPlan | null =
+    activeCourse?.daysList?.find((d) => d.dayNumber === activeCourse.currentDay) ||
+    activeCourse?.daysList?.[0] ||
+    null;
+
+  if (isLoading) {
+    return (
+      <div className="p-16 text-center text-xs text-zinc-400 font-mono flex items-center justify-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
+        <span>Loading daily plan...</span>
+      </div>
+    );
+  }
+
+  if (courses.length === 0 || !activeCourse || !activeDay) {
+    return (
+      <div className="max-w-md mx-auto my-16 bg-white rounded-md border border-zinc-200 p-10 text-center space-y-4 shadow-2xs">
+        <div className="w-12 h-12 rounded-sm bg-zinc-100 flex items-center justify-center mx-auto text-zinc-500">
+          <Calendar className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-zinc-900">
+            No Daily Plan Available
+          </h3>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Create or import a course to generate your daily syllabus topics, lecture notes, and quizzes.
+          </p>
+        </div>
+        <Link
+          href="/courses/new"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Course</span>
+        </Link>
+      </div>
+    );
+  }
 
   if (isDaySessionActive) {
     return (
@@ -73,129 +99,83 @@ export default function TodayPlanPage() {
           <span className="text-[10px] font-mono uppercase text-zinc-400 block">
             Today's Learning
           </span>
-          <h1 className="text-base sm:text-lg font-bold text-zinc-900 leading-tight">
+          <h1 className="text-base font-bold text-zinc-900">
             {activeCourse.title}
           </h1>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-zinc-200 bg-zinc-50 text-xs font-mono text-zinc-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500 font-mono">
+            Day {activeCourse.currentDay} of {activeCourse.totalDays}
+          </span>
+          <span className="text-zinc-300">•</span>
+          <div className="flex items-center gap-1 text-xs font-mono text-zinc-700">
             <Flame className="w-3.5 h-3.5 text-zinc-700" />
-            <span>{activeCourse.streakDays || 7}d streak</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-zinc-900 bg-zinc-900 text-xs font-mono text-white">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Day {activeCourse.currentDay} of {activeCourse.totalDays}</span>
+            <span>{activeCourse.streakDays}d streak</span>
           </div>
         </div>
       </div>
 
-      {/* ── TODAY SECTION CARDS ── */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between pb-1 border-b border-zinc-100">
-          <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-            Today's Task Queue
-          </h2>
-          <span className="text-[11px] font-mono text-zinc-400">
-            {courses.length} Active Courses
-          </span>
+      {/* ── COURSE SWITCHER (If multiple courses exist) ── */}
+      {courses.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {courses.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setSelectedCourseId(c.id)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-sm border transition-colors whitespace-nowrap cursor-pointer",
+                c.id === activeCourse.id
+                  ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
+                  : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50"
+              )}
+            >
+              {c.title}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── DAILY TARGET CARD ── */}
+      <div className="bg-white rounded-md border border-zinc-200 p-6 space-y-5 shadow-2xs">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <span className="px-2 py-0.5 rounded-xs bg-zinc-100 border border-zinc-200 text-[10px] font-mono text-zinc-700">
+              Day {activeDay.dayNumber} Focus Topic
+            </span>
+            <h2 className="text-lg font-bold text-zinc-900 pt-1">
+              {activeDay.title}
+            </h2>
+            <p className="text-xs text-zinc-500 font-mono">
+              Estimated study time: {activeDay.durationMinutes} minutes
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsDaySessionActive(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer shrink-0"
+          >
+            <span>Start Session</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {courses.map((course, idx) => {
-            const isPending = idx === 0;
-            const isCompleted = idx === 1;
-
-            return (
-              <div
-                key={course.id}
-                className={cn(
-                  "p-5 rounded-sm border transition-colors flex flex-col justify-between min-h-[220px]",
-                  isPending
-                    ? "bg-white border-zinc-900 shadow-xs"
-                    : isCompleted
-                    ? "bg-emerald-50/40 border-emerald-300"
-                    : "bg-white border-zinc-200"
-                )}
+        {/* Topics Covered */}
+        <div className="space-y-2 pt-2 border-t border-zinc-100">
+          <h3 className="text-xs font-semibold text-zinc-900 uppercase font-mono tracking-wider">
+            Topics in this session
+          </h3>
+          <ul className="space-y-1.5">
+            {activeDay.topicsCovered.map((topic, idx) => (
+              <li
+                key={idx}
+                className="flex items-center gap-2 text-xs text-zinc-700"
               >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase text-zinc-400 block">
-                        Day {course.currentDay} of {course.totalDays}
-                      </span>
-                      <h3 className="text-sm font-bold text-zinc-900 mt-0.5">
-                        {course.title}
-                      </h3>
-                    </div>
-
-                    {isCompleted ? (
-                      <span className="px-2 py-0.5 rounded-2xs bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Completed
-                      </span>
-                    ) : isPending ? (
-                      <span className="px-2 py-0.5 rounded-2xs bg-zinc-900 text-white text-[10px] font-mono font-bold">
-                        Pending Today
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-2xs bg-zinc-100 text-zinc-600 text-[10px] font-mono">
-                        {course.preferredTime}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="bg-zinc-50 rounded-xs p-3 border border-zinc-200/60 space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-zinc-400 block">
-                      Today's Topic:
-                    </span>
-                    <p className="text-xs font-semibold text-zinc-900 leading-snug">
-                      {course.currentTopic}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[10px] font-mono text-zinc-500">
-                      <span>Course Progress</span>
-                      <span>{course.progressPercentage}%</span>
-                    </div>
-                    <ProgressBar
-                      value={course.progressPercentage}
-                      size="sm"
-                      color="neutral"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-3 mt-3 border-t border-zinc-100 flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-zinc-400">
-                    {course.minutesPerDay}m Session
-                  </span>
-
-                  {isPending ? (
-                    <button
-                      onClick={() => {
-                        setSelectedCourseId(course.id);
-                        setIsDaySessionActive(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-2xs cursor-pointer"
-                    >
-                      <span>Continue</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/courses/${course.id}`}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-800 hover:underline"
-                    >
-                      <span>View Dashboard</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </Link>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 shrink-0" />
+                <span>{topic}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>

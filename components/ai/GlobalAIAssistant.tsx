@@ -25,20 +25,18 @@ export const GlobalAIAssistant: React.FC = () => {
     {
       id: "m-1",
       sender: "ai",
-      text: `Hello ${mockUserProfile.name}. I am your SmartLearn AI Assistant.\n\nAsk any question regarding formulas, circuit logic, algorithmic derivations, or course schedules.`,
+      text: "Hello. I am your SmartLearn AI Assistant.\n\nAsk any question regarding concepts, formulas, code, derivations, or course schedules.",
       timestamp: "Just now",
     },
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeCourse = mockCourses[0];
-
   const suggestedPrompts = [
-    "Explain 4:1 MUX equation simply",
-    "Why did I get K-Map quad grouping wrong?",
-    "How many select lines for a 64:1 MUX?",
-    "What is the difference between MUX and DEMUX?",
+    "What should I study today?",
+    "Explain my current course topic simply",
+    "Help me prepare for my next quiz check",
+    "How can I improve my mastery score?",
   ];
 
   useEffect(() => {
@@ -63,9 +61,8 @@ export const GlobalAIAssistant: React.FC = () => {
     setIsTyping(true);
 
     const userContext = `Learner: ${mockUserProfile.name}
-Active Track: ${activeCourse.title} (Day ${activeCourse.currentDay}/${activeCourse.totalDays}, Streak: ${activeCourse.streakDays}d)
-Recent Diagnosis: K-Map 4-corner quad grouping misconception m(0,2,8,10)
-Total Courses: ${mockCourses.map((c) => `${c.title} (${c.streakDays}d streak)`).join(", ")}`;
+Role: Active Student on SmartLearn Platform
+Goal: Systematic topic mastery, algorithmic derivations, and technical skill development.`;
 
     try {
       const res = await fetch("/api/ai/chat", {
@@ -133,7 +130,7 @@ Total Courses: ${mockCourses.map((c) => `${c.title} (${c.streakDays}d streak)`).
                   SmartLearn AI Assistant
                 </h3>
                 <p className="text-[10px] font-mono text-zinc-500">
-                  {activeCourse.title} (Day {activeCourse.currentDay})
+                  Curriculum & Concept Tutor
                 </p>
               </div>
             </div>
@@ -148,8 +145,8 @@ Total Courses: ${mockCourses.map((c) => `${c.title} (${c.streakDays}d streak)`).
 
           {/* Context Strip */}
           <div className="px-3 py-1 bg-zinc-100/80 border-b border-zinc-200 text-[10px] font-mono text-zinc-600 flex items-center justify-between">
-            <span>Learner: {mockUserProfile.name}</span>
-            <span>Streak: {activeCourse.streakDays}d</span>
+            <span>Adaptive AI Learning Tutor</span>
+            <span>Online</span>
           </div>
 
           {/* Messages Stream */}

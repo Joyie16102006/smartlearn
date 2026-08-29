@@ -21,7 +21,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Courses", href: "/dashboard", icon: BookOpen },
-  { name: "Plan Today", href: "/learn", icon: Compass, badge: "Day 8" },
+  { name: "Plan Today", href: "/learn", icon: Compass },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -131,7 +131,7 @@ export const Sidebar: React.FC = () => {
                 {mockUserProfile.name}
               </p>
               <p className="text-[10px] text-zinc-500 truncate font-mono">
-                7d Streak · Student
+                Student Account
               </p>
             </div>
           </Link>
