@@ -30,8 +30,8 @@ export default function NewCoursePage() {
   const [links, setLinks] = useState<string[]>([]);
   const [newLinkInput, setNewLinkInput] = useState("");
 
-  // Uploaded files list
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  // Uploaded real files list
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
@@ -73,8 +73,8 @@ export default function NewCoursePage() {
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const names = Array.from(e.target.files).map((f) => f.name);
-      setUploadedFiles((prev) => [...prev, ...names]);
+      const filesArray = Array.from(e.target.files);
+      setUploadedFiles((prev) => [...prev, ...filesArray]);
     }
   };
 
@@ -95,19 +95,38 @@ export default function NewCoursePage() {
     }, 2500);
 
     try {
-      const res = await fetch("/api/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: courseName,
-          goal: learningGoal,
-          level,
-          totalDays: days,
-          minutesPerDay,
-          sources: links,
-          files: uploadedFiles,
-        }),
-      });
+      let res: Response;
+      if (uploadedFiles.length > 0) {
+        const formData = new FormData();
+        formData.append("title", courseName);
+        formData.append("goal", learningGoal);
+        formData.append("level", level);
+        formData.append("totalDays", String(days));
+        formData.append("minutesPerDay", String(minutesPerDay));
+        formData.append("sources", JSON.stringify(links));
+        uploadedFiles.forEach((file) => {
+          formData.append("files", file);
+        });
+
+        res = await fetch("/api/courses", {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        res = await fetch("/api/courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: courseName,
+            goal: learningGoal,
+            level,
+            totalDays: days,
+            minutesPerDay,
+            sources: links,
+            files: [],
+          }),
+        });
+      }
 
       clearInterval(stepInterval);
 
@@ -358,7 +377,8 @@ export default function NewCoursePage() {
                       className="px-2.5 py-1 rounded-2xs bg-white border border-zinc-200 text-xs font-mono text-zinc-700 flex items-center gap-1.5"
                     >
                       <FileText className="w-3 h-3 text-zinc-400" />
-                      <span>{file}</span>
+                      <span>{file.name}</span>
+                      <span className="text-[10px] text-zinc-400">({Math.round(file.size / 1024)} KB)</span>
                       <button
                         type="button"
                         onClick={(e) => {

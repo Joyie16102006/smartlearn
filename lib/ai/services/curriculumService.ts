@@ -1,12 +1,13 @@
 import { getAIProvider } from "../provider";
 
 /**
- * Model 2: Curriculum and Knowledge Graph Service
+ * Model 2: Curriculum & DAG Knowledge Graph Generator
  *
  * Responsibilities:
- * - Analyze all extracted concepts
- * - Identify prerequisites & build DAG relations
- * - Construct day-wise curriculum respecting user's duration and daily minutes
+ * - Deconstruct subject matter into modular Concept Nodes
+ * - Build Directed Acyclic Graph (DAG) with prerequisites
+ * - Calibrate difficulty & estimated mastery duration
+ * - Partition curriculum into day-wise study schedule
  */
 
 export interface GeneratedConcept {
@@ -22,7 +23,7 @@ export interface GeneratedConcept {
   dayAssigned: number;
 }
 
-export interface GeneratedDay {
+export interface GeneratedDayPlan {
   dayNumber: number;
   title: string;
   conceptId: string;
@@ -34,7 +35,7 @@ export interface GeneratedCurriculum {
   description: string;
   category: string;
   concepts: GeneratedConcept[];
-  daysList: GeneratedDay[];
+  daysList: GeneratedDayPlan[];
 }
 
 export class CurriculumService {
@@ -47,60 +48,111 @@ export class CurriculumService {
     sourceContext?: string;
   }): Promise<GeneratedCurriculum> {
     const provider = getAIProvider();
+    const safeTotalDays = params.totalDays || 30;
+    const safeMinutes = params.minutesPerDay || 60;
 
     if (provider) {
       const systemPrompt = `You are SmartLearn AI Course Architect.
-Generate a comprehensive, pedagogically sound curriculum knowledge graph (DAG) and day-wise schedule.
-Return strictly valid JSON matching this schema:
+Generate a structured knowledge graph (DAG) and day-wise schedule for a technical course.
+Return ONLY valid JSON matching this schema:
 {
-  "description": "2-3 sentence overview of the course",
-  "category": "e.g. Computer Engineering / Computer Science / Mathematics",
+  "description": "2-3 sentence overview of what the student will master",
+  "category": "Subject Category (e.g. Computer Science, Electrical Engineering, Mathematics)",
   "concepts": [
     {
-      "id": "c-unique-id",
-      "name": "Concept Name",
+      "id": "concept-1-id",
+      "name": "Concept Title",
       "slug": "concept-slug",
-      "importance": "high" | "medium" | "low",
-      "difficulty": "Beginner" | "Intermediate" | "Advanced",
-      "estimatedMinutes": 45,
-      "description": "Summary of concept and what learner will master",
-      "prerequisites": ["c-prereq-id"],
-      "keyFormulas": ["LaTeX formula if applicable"],
+      "importance": "high",
+      "difficulty": "Beginner",
+      "estimatedMinutes": ${safeMinutes},
+      "description": "Concise concept summary",
+      "prerequisites": [],
+      "keyFormulas": ["Key equation in plain text or LaTeX"],
       "dayAssigned": 1
     }
   ],
   "daysList": [
     {
       "dayNumber": 1,
-      "title": "Day Title",
-      "conceptId": "c-unique-id",
-      "topicsCovered": ["Subtopic 1", "Subtopic 2", "Subtopic 3"],
-      "durationMinutes": 60
+      "title": "Day 1 Title",
+      "conceptId": "concept-1-id",
+      "topicsCovered": ["Topic A", "Topic B"],
+      "durationMinutes": ${safeMinutes}
     }
   ]
 }`;
 
-      const userPrompt = `Build a complete ${params.totalDays}-day course:
-Course Title: ${params.title}
-Student Goal: ${params.goal}
-Experience Level: ${params.level}
-Pacing: ${params.minutesPerDay} minutes per day
-${params.sourceContext ? `Source Material / Syllabus Summary:\n${params.sourceContext}` : ""}
+      const userPrompt = `Build a complete curriculum for:
+Course: ${params.title}
+Goal: ${params.goal}
+Level: ${params.level}
+Duration: ${safeTotalDays} days (${safeMinutes} mins/day)
+${params.sourceContext ? `Syllabus/PDF Material:\n${params.sourceContext.slice(0, 4000)}` : ""}
 
-Generate between 8 to 15 concept nodes with clear prerequisite dependencies, and assign all ${params.totalDays} days sequentially.`;
+Generate 6 to 10 distinct concept nodes with prerequisite dependencies. Provide daily lesson milestones covering the ${safeTotalDays}-day schedule.`;
 
       try {
         const result = await provider.generateJSON<GeneratedCurriculum>(userPrompt, systemPrompt);
         if (result && result.concepts && result.concepts.length > 0) {
-          return result;
+          // Normalize and ensure all days up to safeTotalDays are populated
+          const concepts = result.concepts.map((c, i) => ({
+            ...c,
+            id: c.id || `concept-${i + 1}`,
+            slug: c.slug || c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            importance: c.importance || "high",
+            difficulty: c.difficulty || (i === 0 ? "Beginner" : i < conceptsLength(result.concepts) / 2 ? "Intermediate" : "Advanced"),
+            estimatedMinutes: c.estimatedMinutes || safeMinutes,
+            prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
+            keyFormulas: Array.isArray(c.keyFormulas) ? c.keyFormulas : [],
+            dayAssigned: c.dayAssigned || Math.min(i * 3 + 1, safeTotalDays),
+          }));
+
+          const rawDays = Array.isArray(result.daysList) ? result.daysList : [];
+          const daysMap = new Map<number, GeneratedDayPlan>();
+          rawDays.forEach((d) => {
+            if (d.dayNumber && d.dayNumber <= safeTotalDays) {
+              daysMap.set(d.dayNumber, {
+                dayNumber: d.dayNumber,
+                title: d.title || `Day ${d.dayNumber}: ${params.title}`,
+                conceptId: d.conceptId || concepts[0].id,
+                topicsCovered: Array.isArray(d.topicsCovered) && d.topicsCovered.length > 0 ? d.topicsCovered : ["Foundations", "Applications"],
+                durationMinutes: d.durationMinutes || safeMinutes,
+              });
+            }
+          });
+
+          // Fill any missing days sequentially
+          const fullDaysList: GeneratedDayPlan[] = [];
+          for (let dayNum = 1; dayNum <= safeTotalDays; dayNum++) {
+            if (daysMap.has(dayNum)) {
+              fullDaysList.push(daysMap.get(dayNum)!);
+            } else {
+              const conceptIndex = Math.min(Math.floor(((dayNum - 1) / safeTotalDays) * concepts.length), concepts.length - 1);
+              const assignedConcept = concepts[conceptIndex];
+              fullDaysList.push({
+                dayNumber: dayNum,
+                title: `${assignedConcept.name}: Part ${((dayNum - 1) % 3) + 1}`,
+                conceptId: assignedConcept.id,
+                topicsCovered: [assignedConcept.name, "Analysis & Practice Problems"],
+                durationMinutes: safeMinutes,
+              });
+            }
+          }
+
+          return {
+            description: result.description || `Comprehensive ${safeTotalDays}-day curriculum for ${params.title}.`,
+            category: result.category || "Technical Engineering",
+            concepts,
+            daysList: fullDaysList,
+          };
         }
       } catch (err) {
-        console.warn("AI Curriculum generator failed, using robust fallback:", err);
+        console.warn("Nemotron curriculum generator fallback:", err);
       }
     }
 
-    // High-quality fallback template when AI provider is not yet configured
-    const safeTotalDays = params.totalDays || 30;
+    // High-quality fallback template
     const baseSlug = params.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
     const fallbackConcepts: GeneratedConcept[] = [
@@ -110,7 +162,7 @@ Generate between 8 to 15 concept nodes with clear prerequisite dependencies, and
         slug: "core-axioms",
         importance: "high",
         difficulty: "Beginner",
-        estimatedMinutes: params.minutesPerDay,
+        estimatedMinutes: safeMinutes,
         description: `Fundamental axioms and mathematical underpinnings of ${params.title}.`,
         prerequisites: [],
         keyFormulas: ["E = mc^2", "f(x) = y"],
@@ -122,7 +174,7 @@ Generate between 8 to 15 concept nodes with clear prerequisite dependencies, and
         slug: "systematic-analysis",
         importance: "high",
         difficulty: "Intermediate",
-        estimatedMinutes: params.minutesPerDay,
+        estimatedMinutes: safeMinutes,
         description: `Core algorithms, structural frameworks, and reduction techniques in ${params.title}.`,
         prerequisites: [`${baseSlug}-foundations`],
         dayAssigned: Math.min(2, safeTotalDays),
@@ -133,41 +185,36 @@ Generate between 8 to 15 concept nodes with clear prerequisite dependencies, and
         slug: "advanced-synthesis",
         importance: "high",
         difficulty: "Advanced",
-        estimatedMinutes: params.minutesPerDay,
+        estimatedMinutes: safeMinutes,
         description: `Complex multi-component synthesis, optimization bounds, and practical implementation.`,
         prerequisites: [`${baseSlug}-intermediate-analysis`],
         dayAssigned: Math.min(3, safeTotalDays),
       },
     ];
 
-    const fallbackDays: GeneratedDay[] = [];
-    for (let i = 1; i <= safeTotalDays; i++) {
-      const assignedConcept =
-        i <= Math.ceil(safeTotalDays / 3)
-          ? fallbackConcepts[0]
-          : i <= Math.ceil((2 * safeTotalDays) / 3)
-          ? fallbackConcepts[1]
-          : fallbackConcepts[2];
+    const fallbackDays: GeneratedDayPlan[] = Array.from({ length: safeTotalDays }, (_, idx) => {
+      const dayNum = idx + 1;
+      const conceptIdx = Math.min(Math.floor((idx / safeTotalDays) * fallbackConcepts.length), fallbackConcepts.length - 1);
+      const assignedConcept = fallbackConcepts[conceptIdx];
 
-      fallbackDays.push({
-        dayNumber: i,
-        title: `Module ${i}: ${params.title} Exploration Part ${i}`,
+      return {
+        dayNumber: dayNum,
+        title: `Day ${dayNum}: ${assignedConcept.name} (Unit ${((idx % 3) + 1)})`,
         conceptId: assignedConcept.id,
-        topicsCovered: [
-          `Fundamental derivation & principles of Part ${i}`,
-          `Practical implementation step ${i}`,
-          `Verification & error analysis`,
-        ],
-        durationMinutes: params.minutesPerDay || 60,
-      });
-    }
+        topicsCovered: [`${assignedConcept.name} Fundamentals`, "Derivations & Problem Solving", "Practical Implementation"],
+        durationMinutes: safeMinutes,
+      };
+    });
 
     return {
-      description: `Structured, adaptive ${safeTotalDays}-day curriculum for ${params.title}. Designed for ${params.level} level at ${params.minutesPerDay} minutes per day.`,
-      category: "Engineering & Applied Sciences",
+      description: `Structured, adaptive ${safeTotalDays}-day curriculum for ${params.title}. Designed for ${params.level} level at ${safeMinutes} minutes per day.`,
+      category: "Computer Engineering",
       concepts: fallbackConcepts,
       daysList: fallbackDays,
     };
   }
 }
 
+function conceptsLength(arr: any[]): number {
+  return Array.isArray(arr) ? arr.length : 3;
+}
