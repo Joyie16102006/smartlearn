@@ -1,7 +1,8 @@
 "use client";
 
-import React, { use, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { CourseFlowchart } from "@/components/courses/CourseFlowchart";
 import { DayLearningView } from "@/components/learning/DayLearningView";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -20,14 +21,9 @@ import { cn } from "@/lib/utils";
 import { Course, ConceptNode, DayPlan } from "@/types";
 import { useSidebar } from "@/components/layout/SidebarContext";
 
-interface CourseOverviewPageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-export default function CourseOverviewPage({ params }: CourseOverviewPageProps) {
-  const resolvedParams = use(params);
+export default function CourseOverviewPage() {
+  const params = useParams();
+  const courseId = params?.id as string;
   const { isCollapsed } = useSidebar();
 
   const [course, setCourse] = useState<Course | null>(null);
@@ -37,7 +33,8 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
   const [isDaySessionActive, setIsDaySessionActive] = useState<boolean>(false);
 
   useEffect(() => {
-    fetch(`/api/courses/${resolvedParams.id}`)
+    if (!courseId) return;
+    fetch(`/api/courses/${courseId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.id) {
@@ -47,7 +44,7 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
       })
       .catch((err) => console.warn("Failed to load course from DB:", err))
       .finally(() => setIsLoading(false));
-  }, [resolvedParams.id]);
+  }, [courseId]);
 
   if (isLoading) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   Plus,
   Trash2,
-  Loader2
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 export default function NewCoursePage() {
@@ -34,12 +35,25 @@ export default function NewCoursePage() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const generationPhases = [
-    { title: "Parsing Uploaded Syllabus & References", desc: "Extracting chapters, formulas, and topic dependencies from source materials..." },
-    { title: "Deconstructing Concept DAG & Prerequisites", desc: "Identifying prerequisite graphs and cognitive sequencing..." },
-    { title: "Calibrating Day-Wise Split of Work", desc: `Dividing workload into ${days} daily units with ${minutesPerDay}m pacing...` },
-    { title: "Constructing Course Flowchart", desc: "Synthesizing interactive concept nodes, formula cards, and diagnostic checks..." },
+    {
+      title: "Parsing Uploaded Syllabus & Source Documents",
+      desc: "Model 1 is extracting text, chapters, and topics from your uploaded materials...",
+    },
+    {
+      title: "Deconstructing Concept Knowledge Graph & Prerequisites",
+      desc: "Model 2 (Nemotron 550B) is building the cognitive sequence and dependency graph...",
+    },
+    {
+      title: "Calibrating Day-Wise Pacing & Difficulty",
+      desc: `Synthesizing ${days} daily learning blocks at ${minutesPerDay}m/day with difficulty weights...`,
+    },
+    {
+      title: "Constructing Course Flowchart & Interactive DAG",
+      desc: "Writing DAG nodes, formula cards, and daily topics to Supabase PostgreSQL database...",
+    },
   ];
 
   const handleAddLink = () => {
@@ -66,21 +80,20 @@ export default function NewCoursePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     setIsGenerating(true);
     setGenerationStep(0);
 
-    const interval = setInterval(() => {
+    // Dynamic phase stepper while API is computing
+    const stepInterval = setInterval(() => {
       setGenerationStep((prev) => {
         if (prev < generationPhases.length - 1) {
           return prev + 1;
-        } else {
-          clearInterval(interval);
-          return prev;
         }
+        return prev;
       });
-    }, 1000);
+    }, 2500);
 
-    let createdCourseId = "digital-electronics";
     try {
       const res = await fetch("/api/courses", {
         method: "POST",
@@ -96,16 +109,25 @@ export default function NewCoursePage() {
         }),
       });
 
+      clearInterval(stepInterval);
+
       const data = await res.json();
-      if (data && data.id) {
-        createdCourseId = data.id;
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to generate course with AI engine");
       }
-    } catch (err) {
-      console.warn("Course generation API fallback:", err);
-    } finally {
+
+      // Mark all phases as completed before redirect
+      setGenerationStep(generationPhases.length);
+
       setTimeout(() => {
-        router.push(`/courses/${createdCourseId}`);
-      }, 4400);
+        router.push(`/courses/${data.id}`);
+      }, 800);
+    } catch (err: any) {
+      clearInterval(stepInterval);
+      console.error("Course generation error:", err);
+      setErrorMessage(err.message || "Failed to generate course. Please try again.");
+      setIsGenerating(false);
     }
   };
 
@@ -121,8 +143,18 @@ export default function NewCoursePage() {
         </p>
       </div>
 
+      {errorMessage && (
+        <div className="p-4 rounded-sm border border-red-200 bg-red-50 flex items-start gap-3 text-red-800 text-xs animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <p className="font-semibold">Generation Failed</p>
+            <p className="text-red-700 leading-relaxed">{errorMessage}</p>
+          </div>
+        </div>
+      )}
+
       {isGenerating ? (
-        /* AI Generation Animated Loading State */
+        /* Real AI Generation Progress View */
         <div className="p-8 sm:p-10 rounded-sm bg-white border border-zinc-200 text-center space-y-6 animate-in fade-in">
           <div className="w-12 h-12 rounded-sm bg-zinc-900 text-white flex items-center justify-center mx-auto shadow-xs">
             <Sparkles className="w-6 h-6 animate-pulse" />
@@ -130,35 +162,44 @@ export default function NewCoursePage() {
 
           <div className="space-y-1 max-w-md mx-auto">
             <h2 className="text-sm font-bold text-zinc-900">
-              {generationPhases[generationStep].title}
+              {generationStep < generationPhases.length
+                ? generationPhases[generationStep].title
+                : "Course & Flowchart Generated!"}
             </h2>
             <p className="text-xs text-zinc-500 leading-relaxed">
-              {generationPhases[generationStep].desc}
+              {generationStep < generationPhases.length
+                ? generationPhases[generationStep].desc
+                : "Redirecting to your interactive course flowchart..."}
             </p>
           </div>
 
           {/* Stepper Progress */}
           <div className="max-w-md mx-auto space-y-2 pt-2">
-            {generationPhases.map((phase, idx) => (
-              <div
-                key={idx}
-                className={`p-3 rounded-sm border text-left text-xs transition-all flex items-center justify-between ${
-                  idx < generationStep
-                    ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-medium"
-                    : idx === generationStep
-                    ? "bg-zinc-100 border-zinc-900 text-zinc-950 font-semibold"
-                    : "bg-zinc-50/50 border-zinc-200 text-zinc-400 opacity-60"
-                }`}
-              >
-                <span>0{idx + 1}. {phase.title}</span>
-                {idx < generationStep && (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                )}
-                {idx === generationStep && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-900" />
-                )}
-              </div>
-            ))}
+            {generationPhases.map((phase, idx) => {
+              const isDone = idx < generationStep;
+              const isCurrent = idx === generationStep;
+
+              return (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-sm border text-left text-xs transition-all flex items-center justify-between ${
+                    isDone
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-medium"
+                      : isCurrent
+                      ? "bg-zinc-100 border-zinc-900 text-zinc-950 font-semibold"
+                      : "bg-zinc-50/50 border-zinc-200 text-zinc-400 opacity-60"
+                  }`}
+                >
+                  <span>
+                    0{idx + 1}. {phase.title}
+                  </span>
+                  {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                  {isCurrent && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-900" />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -211,7 +252,7 @@ export default function NewCoursePage() {
                       type="button"
                       key={lvl}
                       onClick={() => setLevel(lvl)}
-                      className={`py-2 px-3 rounded-xs text-xs font-medium border transition-colors text-center ${
+                      className={`py-2 px-3 rounded-xs text-xs font-medium border transition-colors text-center cursor-pointer ${
                         level === lvl
                           ? "bg-zinc-900 text-white border-zinc-900"
                           : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"
@@ -225,17 +266,17 @@ export default function NewCoursePage() {
             </div>
           </div>
 
-          {/* Section 2: Time & Schedule Budget */}
+          {/* Section 2: Time Budget & Schedule */}
           <div className="p-5 rounded-sm bg-white border border-zinc-200 space-y-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-zinc-700" />
-              <span>2. Time & Duration Budget</span>
+              <span>2. Time Budget & Schedule Calibration</span>
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
                 <label className="block text-[11px] font-mono uppercase text-zinc-500 mb-1">
-                  Duration (Total Days)
+                  Total Target Days
                 </label>
                 <input
                   type="number"
@@ -324,7 +365,7 @@ export default function NewCoursePage() {
                           e.stopPropagation();
                           handleRemoveFile(idx);
                         }}
-                        className="text-zinc-400 hover:text-red-600"
+                        className="text-zinc-400 hover:text-red-600 cursor-pointer"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -350,7 +391,7 @@ export default function NewCoursePage() {
                   <button
                     type="button"
                     onClick={() => handleRemoveLink(idx)}
-                    className="p-1.5 rounded-xs text-zinc-400 hover:text-red-600 transition-colors"
+                    className="p-1.5 rounded-xs text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -360,40 +401,38 @@ export default function NewCoursePage() {
               {/* Add link input */}
               <div className="flex items-center gap-2">
                 <input
-                  type="text"
+                  type="url"
                   value={newLinkInput}
                   onChange={(e) => setNewLinkInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddLink())}
-                  placeholder="Paste YouTube playlist or syllabus link..."
-                  className="flex-1 px-3 py-1.5 text-xs rounded-xs bg-zinc-50 border border-zinc-200 text-zinc-900 focus:outline-none focus:border-zinc-500 focus:bg-white"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddLink();
+                    }
+                  }}
+                  placeholder="https://youtube.com/playlist?list=... or documentation URL"
+                  className="flex-1 px-3.5 py-1.5 rounded-xs bg-zinc-50 border border-zinc-200 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus:bg-white font-mono"
                 />
                 <button
                   type="button"
                   onClick={handleAddLink}
-                  className="px-3 py-1.5 rounded-xs bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 text-xs font-medium text-zinc-800 transition-colors"
+                  className="px-3 py-1.5 rounded-xs border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs text-zinc-700 font-medium transition-colors flex items-center gap-1 cursor-pointer shrink-0"
                 >
-                  <Plus className="w-3 h-3 inline mr-1" />
-                  Add Link
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add URL</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Submit CTA */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-4 py-2 rounded-xs text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors"
-            >
-              Cancel
-            </button>
+          {/* Submit Button */}
+          <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xs bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-sm bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Generate Course Flowchart</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Generate Course & Flowchart</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
