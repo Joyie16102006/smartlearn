@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { CurriculumService } from "@/lib/ai/services/curriculumService";
-import { RAGService } from "@/lib/ai/services/ragService";
+import { RAGService, ExtractedUnit } from "@/lib/ai/services/ragService";
 
 /**
  * GET /api/courses
@@ -69,6 +69,8 @@ export async function POST(req: Request) {
       extractedText?: string;
     }> = [];
 
+    const allExtractedUnits: ExtractedUnit[] = [];
+
     // Case A: Multipart Form Data with actual binary files
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -93,8 +95,11 @@ export async function POST(req: Request) {
             const buffer = Buffer.from(await file.arrayBuffer());
             const extracted = await RAGService.extractFromPDF(buffer);
             const chunked = RAGService.processSourceContent(file.name, "file", extracted.text);
+            if (chunked.units && chunked.units.length > 0) {
+              allExtractedUnits.push(...chunked.units);
+            }
 
-            extractedContext += `\nDocument: ${file.name} (${extracted.numPages} pages)\nKey Topics: ${chunked.keyTopics.join(", ")}\nSummary:\n${chunked.summary}\n`;
+            extractedContext += `\nDocument: ${file.name} (${extracted.numPages} pages)\n${chunked.fullTextPreview}\n`;
 
             sourceRecords.push({
               type: "file",
@@ -143,6 +148,9 @@ export async function POST(req: Request) {
       for (const url of sources) {
         if (typeof url === "string" && url.trim()) {
           const processed = RAGService.processSourceContent(url, "url", `Syllabus reference from ${url}`);
+          if (processed.units && processed.units.length > 0) {
+            allExtractedUnits.push(...processed.units);
+          }
           extractedContext += `\nSource URL: ${url}\nKey Topics: ${processed.keyTopics.join(", ")}\n`;
           sourceRecords.push({
             type: "url",
@@ -165,7 +173,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Generate Curriculum & DAG via Model 2 (Nemotron 550B)
+    // 2. Generate Curriculum & DAG via Model 2 (Nemotron 550B / Source Parser)
     const curriculum = await CurriculumService.generateCurriculum({
       title,
       goal,
@@ -173,6 +181,7 @@ export async function POST(req: Request) {
       totalDays,
       minutesPerDay,
       sourceContext: extractedContext,
+      extractedUnits: allExtractedUnits,
     });
 
     const baseSlug = (title || "new-course").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30);

@@ -28,7 +28,10 @@ function getEnv(key: string): string | undefined {
 
 export function parseJSON<T>(rawText: string): T {
   let cleaned = rawText.trim();
-  
+
+  // Strip <think>...</think> reasoning tokens from reasoning models
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
   // Extract JSON block if surrounded by markdown code fences
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenceMatch) {

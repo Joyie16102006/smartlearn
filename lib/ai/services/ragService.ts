@@ -19,12 +19,19 @@ export interface SourceChunk {
   tokensEstimate: number;
 }
 
+export interface ExtractedUnit {
+  title: string;
+  subtopics: string[];
+  formulas: string[];
+}
+
 export interface ExtractedKnowledgeContext {
   summary: string;
   keyTopics: string[];
-  keyFormulas?: string[];
-  prerequisites?: string[];
+  keyFormulas: string[];
+  units: ExtractedUnit[];
   chunks: SourceChunk[];
+  fullTextPreview: string;
 }
 
 export class RAGService {
@@ -35,8 +42,6 @@ export class RAGService {
    * - Lines that are just page numbers or running headers
    */
   static filterPDFNoise(rawText: string): string {
-    // Heuristic: split the raw PDF text on form-feed or double-newlines > 4
-    // Then discard obviously non-content "pages"
     const noiseHeadings = [
       /^(table of contents|contents)\s*$/im,
       /^(copyright|©|all rights reserved)/im,
@@ -45,14 +50,11 @@ export class RAGService {
       /^(index)\s*$/im,
     ];
 
-    // Split into page-like segments on form feed or 4+ consecutive newlines
     const pageSegments = rawText.split(/\f|\n{4,}/);
 
     const contentPages = pageSegments.filter((segment) => {
       const trimmed = segment.trim();
-      // Drop very short pages (cover, blank, or footer-only pages)
       if (trimmed.length < 120) return false;
-      // Drop noise-heading-dominated pages
       const firstLines = trimmed.slice(0, 300).toLowerCase();
       for (const noisePattern of noiseHeadings) {
         if (noisePattern.test(firstLines)) return false;
@@ -60,15 +62,12 @@ export class RAGService {
       return true;
     });
 
-    // Within surviving pages, filter out pure page-number lines and very short lines
     const cleanedPages = contentPages.map((page) => {
       return page
         .split("\n")
         .filter((line) => {
           const t = line.trim();
-          // Drop lines that are just a number (page numbers)
           if (/^\d+$/.test(t)) return false;
-          // Drop lines shorter than 4 chars (noise)
           if (t.length < 4) return false;
           return true;
         })
@@ -88,10 +87,9 @@ export class RAGService {
       const pdfParse = (await import("pdf-parse")).default || (await import("pdf-parse"));
       const data = await pdfParse(buffer);
       const rawText = data.text || "";
-      // Apply noise filtering to remove cover/ToC/copyright preamble pages
       const filteredText = RAGService.filterPDFNoise(rawText);
       return {
-        text: filteredText || rawText, // fall back to raw if filtering produces nothing
+        text: filteredText || rawText,
         numPages: data.numpages || 1,
       };
     } catch (error: any) {
@@ -102,7 +100,6 @@ export class RAGService {
       };
     }
   }
-
 
   /**
    * 2. Extract content from URLs (YouTube links, documentation, web articles)
@@ -119,7 +116,6 @@ export class RAGService {
         };
       }
 
-      // Fetch web article with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(url, { signal: controller.signal });
@@ -127,7 +123,6 @@ export class RAGService {
 
       if (res.ok) {
         const html = await res.text();
-        // Simple HTML text extraction (stripping scripts, styles, and tags)
         const cleanText = html
           .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
           .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
@@ -151,7 +146,70 @@ export class RAGService {
   }
 
   /**
-   * 3. Process raw text into semantic learning chunks
+   * 3. Deep Structural Extractor: Parses Units, Chapters, Sections, Subtopics, and Formulas from raw text
+   */
+  static extractDocumentStructure(rawText: string): ExtractedUnit[] {
+    const lines = rawText.replace(/\r\n/g, "\n").split("\n");
+    const units: ExtractedUnit[] = [];
+    let currentUnit: ExtractedUnit | null = null;
+
+    const unitRegex = /^(?:UNIT|MODULE|CHAPTER|PART|SECTION)\s+([IVX0-9]+)[\s\-\—:.]+(.*)/i;
+    const sectionHeaderRegex = /^[0-9]+(?:\.[0-9]+)*\s+([A-Z][A-Za-z0-9\s\-\(\)\/\&]{3,60})$/;
+    const formulaRegex = /[=≈]|\b(?:exp|log|sin|cos|sqrt|\^|\b[VIRECP]\s*=\s*)/;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.length < 3) continue;
+
+      const unitMatch = trimmed.match(unitRegex);
+      if (unitMatch) {
+        if (currentUnit && (currentUnit.subtopics.length > 0 || currentUnit.formulas.length > 0)) {
+          units.push(currentUnit);
+        }
+        const rawTitle = unitMatch[2]?.trim() || `Unit ${unitMatch[1]}`;
+        currentUnit = {
+          title: rawTitle.replace(/^[—\-\:\.]\s*/, "").trim() || `Unit ${unitMatch[1]}`,
+          subtopics: [],
+          formulas: [],
+        };
+        continue;
+      }
+
+      const sectionMatch = trimmed.match(sectionHeaderRegex);
+      if (sectionMatch) {
+        if (!currentUnit) {
+          currentUnit = { title: "Foundations & Core Principles", subtopics: [], formulas: [] };
+        }
+        currentUnit.subtopics.push(sectionMatch[1].trim());
+        continue;
+      }
+
+      if (currentUnit) {
+        const segments = trimmed.split(/[,;\n•]+/).map((s) => s.trim()).filter((s) => s.length > 2);
+        for (const segment of segments) {
+          if (formulaRegex.test(segment) && segment.length < 90) {
+            if (!currentUnit.formulas.includes(segment)) {
+              currentUnit.formulas.push(segment);
+            }
+          } else if (segment.length >= 3 && segment.length <= 90) {
+            const cleanTopic = segment.replace(/^[0-9\.\-\*\•\s]+/, "").trim();
+            if (cleanTopic.length >= 3 && !currentUnit.subtopics.includes(cleanTopic)) {
+              currentUnit.subtopics.push(cleanTopic);
+            }
+          }
+        }
+      }
+    }
+
+    if (currentUnit && (currentUnit.subtopics.length > 0 || currentUnit.formulas.length > 0)) {
+      units.push(currentUnit);
+    }
+
+    return units;
+  }
+
+  /**
+   * 4. Process raw text into structured semantic context and units
    */
   static processSourceContent(
     sourceTitle: string,
@@ -159,6 +217,7 @@ export class RAGService {
     rawContent: string
   ): ExtractedKnowledgeContext {
     const cleanContent = rawContent.replace(/\r\n/g, "\n").trim();
+    const units = RAGService.extractDocumentStructure(cleanContent);
     const paragraphs = cleanContent.split(/\n{2,}/).filter((p) => p.trim().length > 20);
 
     const chunks: SourceChunk[] = [];
@@ -192,23 +251,55 @@ export class RAGService {
       });
     }
 
-    // Extract key topic lines (headers or bullets)
-    const keyTopics = cleanContent
-      .split("\n")
-      .filter((line) => line.trim().startsWith("#") || line.trim().startsWith("- ") || line.trim().startsWith("• "))
-      .map((line) => line.replace(/^[#•\-\s]+/, "").trim())
-      .slice(0, 15);
+    // Collect all topics and formulas from the extracted units
+    const keyTopics: string[] = [];
+    const keyFormulas: string[] = [];
+
+    if (units.length > 0) {
+      units.forEach((u) => {
+        keyTopics.push(u.title);
+        u.subtopics.slice(0, 4).forEach((st) => {
+          if (!keyTopics.includes(st)) keyTopics.push(st);
+        });
+        u.formulas.forEach((f) => {
+          if (!keyFormulas.includes(f)) keyFormulas.push(f);
+        });
+      });
+    } else {
+      const headerTopics = cleanContent
+        .split("\n")
+        .filter((line) => line.trim().startsWith("#") || line.trim().startsWith("- ") || line.trim().startsWith("• "))
+        .map((line) => line.replace(/^[#•\-\s]+/, "").trim())
+        .filter((t) => t.length > 3 && t.length < 80);
+
+      keyTopics.push(...(headerTopics.length > 0 ? headerTopics.slice(0, 15) : ["Core Foundations", "Applied Principles"]));
+    }
+
+    // Build rich text preview for AI
+    let fullTextPreview = "";
+    if (units.length > 0) {
+      fullTextPreview = units
+        .map(
+          (u, i) =>
+            `Unit ${i + 1}: ${u.title}\n  Topics: ${u.subtopics.join(", ")}\n  Formulas: ${u.formulas.join(", ")}`
+        )
+        .join("\n\n");
+    } else {
+      fullTextPreview = cleanContent.slice(0, 8000);
+    }
 
     return {
-      summary: cleanContent.slice(0, 400) + (cleanContent.length > 400 ? "..." : ""),
-      keyTopics: keyTopics.length > 0 ? keyTopics : ["Core Foundations", "Theoretical Principles", "Practical Implementations"],
+      summary: cleanContent.slice(0, 800) + (cleanContent.length > 800 ? "..." : ""),
+      keyTopics: keyTopics.slice(0, 25),
+      keyFormulas: keyFormulas.slice(0, 15),
+      units,
       chunks,
+      fullTextPreview,
     };
   }
 
   /**
-   * 4. AI-Powered Knowledge Distillation (Model 1 Deep RAG)
-   * Uses the configured AI Provider (Gemini / Groq) to extract deep technical context
+   * 5. AI-Powered Knowledge Distillation (Model 1 Deep RAG)
    */
   static async distillKnowledgeContext(params: {
     courseTitle: string;
@@ -223,7 +314,7 @@ export class RAGService {
     const ai = getAIProvider();
 
     const systemPrompt = `You are Model 1: The SmartLearn Knowledge & Source Ingestion Engine.
-Your task is to analyze raw textbook/syllabus/article content and distill it into structured learning concepts.
+Analyze the source text and distill it into structured learning concepts.
 
 Return ONLY a valid JSON object matching this exact schema:
 {
@@ -236,16 +327,17 @@ Return ONLY a valid JSON object matching this exact schema:
     const userPrompt = `Course: ${params.courseTitle}
 Goal: ${params.learningGoal}
 
-Source Material Context:
+Source Material:
 ${params.extractedText.slice(0, 8000)}
 
 Distill the core knowledge units from the above source text.`;
 
     if (!ai) {
+      const units = RAGService.extractDocumentStructure(params.extractedText);
       return {
         summary: `Syllabus material for ${params.courseTitle} focused on ${params.learningGoal}.`,
-        chapters: ["Foundational Principles", "Architecture & Logic", "Advanced Synthesis"],
-        formulas: [],
+        chapters: units.length > 0 ? units.map((u) => u.title) : ["Core Foundations", "Applied Principles"],
+        formulas: units.flatMap((u) => u.formulas),
         keyTerms: [params.courseTitle, "Fundamentals", "Applications"],
       };
     }
@@ -261,12 +353,14 @@ Distill the core knowledge units from the above source text.`;
       return result;
     } catch (err) {
       console.warn("Model 1 AI distillation fallback:", err);
+      const units = RAGService.extractDocumentStructure(params.extractedText);
       return {
         summary: `Syllabus material for ${params.courseTitle} focused on ${params.learningGoal}.`,
-        chapters: ["Foundational Principles", "Architecture & Logic", "Advanced Synthesis"],
-        formulas: [],
+        chapters: units.length > 0 ? units.map((u) => u.title) : ["Core Foundations", "Applied Principles"],
+        formulas: units.flatMap((u) => u.formulas),
         keyTerms: [params.courseTitle, "Fundamentals", "Applications"],
       };
     }
   }
 }
+
