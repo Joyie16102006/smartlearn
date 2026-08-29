@@ -117,30 +117,12 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
     <div
       className={cn(
         "fixed inset-0 flex flex-col bg-zinc-50 z-30 transition-all duration-300 ease-in-out",
-        isCollapsed ? "left-0" : "left-56"
+        isCollapsed ? "left-14" : "left-56"
       )}
     >
       {/* ── FIXED TOP HEADER BAR ── */}
       <div className="flex-none flex items-center justify-between gap-4 px-5 py-3 bg-white border-b border-zinc-200">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {isCollapsed && (
-            <>
-              <button
-                onClick={toggleSidebar}
-                title="Open SmartLearn Sidebar"
-                className="flex items-center gap-2 text-xs font-semibold text-zinc-900 hover:opacity-80 transition-opacity shrink-0 cursor-pointer"
-              >
-                <div className="w-5 h-5 rounded-xs bg-zinc-900 flex items-center justify-center text-white font-bold text-[10px] shadow-2xs">
-                  SL
-                </div>
-                <span className="font-semibold text-xs tracking-tight text-zinc-900">
-                  SmartLearn
-                </span>
-              </button>
-              <div className="h-4 w-px bg-zinc-200 shrink-0 mx-1" />
-            </>
-          )}
-
+        <div className="flex items-center gap-4 min-w-0">
           <Link
             href="/dashboard"
             className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950 transition-colors shrink-0"
@@ -148,7 +130,6 @@ export default function CourseOverviewPage({ params }: CourseOverviewPageProps) 
             <ArrowLeft className="w-4 h-4" />
             <span>Back</span>
           </Link>
-          <div className="h-4 w-px bg-zinc-200 shrink-0 mx-1" />
           <div className="min-w-0">
             <span className="text-[10px] font-mono uppercase text-zinc-400 block leading-none">
               Course Dashboard

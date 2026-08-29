@@ -32,92 +32,110 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       className={cn(
-        "border-r border-zinc-200 bg-white flex flex-col h-screen sticky top-0 shrink-0 z-40 select-none transition-all duration-300 ease-in-out",
-        isCollapsed
-          ? "-ml-56 w-56 -translate-x-full opacity-0 pointer-events-none"
-          : "ml-0 w-56 translate-x-0 opacity-100 shadow-sm"
+        "border-r border-zinc-200 bg-white flex flex-col h-screen sticky top-0 shrink-0 z-40 select-none transition-all duration-300 ease-in-out overflow-hidden",
+        isCollapsed ? "w-14" : "w-56"
       )}
     >
-      {/* Brand Header with interactive SmartLearn Icon Toggle (No extra symbol, no button border) */}
-      <div className="h-14 flex items-center px-4 border-b border-zinc-200">
+      {/* Permanent Brand Header: [SL] stays fixed, text slides left */}
+      <div className="h-14 flex items-center px-4 border-b border-zinc-200 shrink-0 overflow-hidden">
         <button
           onClick={toggleSidebar}
-          title="Click to hide sidebar"
-          className="flex items-center gap-2.5 p-1 -ml-1 hover:opacity-80 transition-opacity text-left cursor-pointer"
+          title={isCollapsed ? "Click to expand sidebar" : "Click to collapse sidebar"}
+          className="flex items-center gap-2.5 p-1 -ml-1 text-left cursor-pointer group focus:outline-none"
         >
-          <div className="w-6 h-6 rounded-sm bg-zinc-900 flex items-center justify-center text-white font-bold text-xs shadow-2xs">
+          {/* Permanent Single Logo */}
+          <div className="w-6 h-6 rounded-sm bg-zinc-900 group-hover:bg-zinc-800 flex items-center justify-center text-white font-bold text-xs shadow-2xs shrink-0 transition-colors">
             SL
           </div>
-          <span className="font-semibold text-sm tracking-tight text-zinc-900">
+
+          {/* Smooth sliding & fading SmartLearn text */}
+          <span
+            className={cn(
+              "font-semibold text-sm tracking-tight text-zinc-900 transition-all duration-300 ease-in-out whitespace-nowrap overflow-hidden",
+              isCollapsed
+                ? "w-0 opacity-0 -translate-x-3 pointer-events-none"
+                : "w-auto opacity-100 translate-x-0"
+            )}
+          >
             SmartLearn
           </span>
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <div className="px-2 pb-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-          Navigation
-        </div>
-
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors",
-                isActive
-                  ? "bg-zinc-900 text-white shadow-xs"
-                  : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
-              )}
-            >
-              <div className="flex items-center gap-2.5">
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span>{item.name}</span>
-              </div>
-              {item.badge && (
-                <span
-                  className={cn(
-                    "px-1.5 py-0.2 text-[10px] font-mono rounded-xs",
-                    isActive
-                      ? "bg-zinc-800 text-zinc-200"
-                      : "bg-zinc-100 text-zinc-600 border border-zinc-200"
-                  )}
-                >
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Bottom Profile Glance */}
-      <div className="p-3 border-t border-zinc-200 bg-zinc-50/50">
-        <Link
-          href="/settings"
-          className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-zinc-100 transition-colors group"
-        >
-          <img
-            src={mockUserProfile.avatarUrl}
-            alt={mockUserProfile.name}
-            className="w-7 h-7 rounded-sm object-cover border border-zinc-200 grayscale contrast-125"
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-zinc-900 group-hover:text-black transition-colors truncate">
-              {mockUserProfile.name}
-            </p>
-            <p className="text-[10px] text-zinc-500 truncate font-mono">
-              7d Streak · Student
-            </p>
+      {/* Sliding Bottom Panel: Navigation + Profile */}
+      <div
+        className={cn(
+          "flex-1 flex flex-col justify-between transition-all duration-300 ease-in-out overflow-hidden w-56",
+          isCollapsed
+            ? "-translate-x-full opacity-0 pointer-events-none"
+            : "translate-x-0 opacity-100"
+        )}
+      >
+        {/* Navigation */}
+        <nav className="px-3 py-4 space-y-1 overflow-y-auto">
+          <div className="px-2 pb-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+            Navigation
           </div>
-        </Link>
+
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  "flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+                  isActive
+                    ? "bg-zinc-900 text-white shadow-xs"
+                    : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{item.name}</span>
+                </div>
+                {item.badge && (
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.2 text-[10px] font-mono rounded-xs",
+                      isActive
+                        ? "bg-zinc-800 text-zinc-200"
+                        : "bg-zinc-100 text-zinc-600 border border-zinc-200"
+                    )}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Bottom Profile Glance */}
+        <div className="p-3 border-t border-zinc-200 bg-zinc-50/50">
+          <Link
+            href="/settings"
+            className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-zinc-100 transition-colors group"
+          >
+            <img
+              src={mockUserProfile.avatarUrl}
+              alt={mockUserProfile.name}
+              className="w-7 h-7 rounded-sm object-cover border border-zinc-200 grayscale contrast-125 shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-zinc-900 group-hover:text-black transition-colors truncate">
+                {mockUserProfile.name}
+              </p>
+              <p className="text-[10px] text-zinc-500 truncate font-mono">
+                7d Streak · Student
+              </p>
+            </div>
+          </Link>
+        </div>
       </div>
     </aside>
   );
