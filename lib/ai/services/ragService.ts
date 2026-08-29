@@ -29,7 +29,57 @@ export interface ExtractedKnowledgeContext {
 
 export class RAGService {
   /**
-   * 1. Extract text from uploaded PDF buffer
+   * Filter out noisy preamble content from PDF text:
+   * - Pages that are nearly empty (< 120 chars after trim)
+   * - Sections that are clearly cover/meta: copyright, preface, TOC, acknowledgements
+   * - Lines that are just page numbers or running headers
+   */
+  static filterPDFNoise(rawText: string): string {
+    // Heuristic: split the raw PDF text on form-feed or double-newlines > 4
+    // Then discard obviously non-content "pages"
+    const noiseHeadings = [
+      /^(table of contents|contents)\s*$/im,
+      /^(copyright|©|all rights reserved)/im,
+      /^(preface|foreword|acknowledgements?|dedication)\s*$/im,
+      /^(about the author|about this book)\s*$/im,
+      /^(index)\s*$/im,
+    ];
+
+    // Split into page-like segments on form feed or 4+ consecutive newlines
+    const pageSegments = rawText.split(/\f|\n{4,}/);
+
+    const contentPages = pageSegments.filter((segment) => {
+      const trimmed = segment.trim();
+      // Drop very short pages (cover, blank, or footer-only pages)
+      if (trimmed.length < 120) return false;
+      // Drop noise-heading-dominated pages
+      const firstLines = trimmed.slice(0, 300).toLowerCase();
+      for (const noisePattern of noiseHeadings) {
+        if (noisePattern.test(firstLines)) return false;
+      }
+      return true;
+    });
+
+    // Within surviving pages, filter out pure page-number lines and very short lines
+    const cleanedPages = contentPages.map((page) => {
+      return page
+        .split("\n")
+        .filter((line) => {
+          const t = line.trim();
+          // Drop lines that are just a number (page numbers)
+          if (/^\d+$/.test(t)) return false;
+          // Drop lines shorter than 4 chars (noise)
+          if (t.length < 4) return false;
+          return true;
+        })
+        .join("\n");
+    });
+
+    return cleanedPages.join("\n\n");
+  }
+
+  /**
+   * 1. Extract text from uploaded PDF buffer (with preamble noise filtering)
    */
   static async extractFromPDF(buffer: Buffer): Promise<{ text: string; numPages: number }> {
     try {
@@ -37,8 +87,11 @@ export class RAGService {
       // @ts-ignore
       const pdfParse = (await import("pdf-parse")).default || (await import("pdf-parse"));
       const data = await pdfParse(buffer);
+      const rawText = data.text || "";
+      // Apply noise filtering to remove cover/ToC/copyright preamble pages
+      const filteredText = RAGService.filterPDFNoise(rawText);
       return {
-        text: data.text || "",
+        text: filteredText || rawText, // fall back to raw if filtering produces nothing
         numPages: data.numpages || 1,
       };
     } catch (error: any) {
@@ -49,6 +102,7 @@ export class RAGService {
       };
     }
   }
+
 
   /**
    * 2. Extract content from URLs (YouTube links, documentation, web articles)

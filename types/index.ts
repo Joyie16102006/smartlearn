@@ -15,9 +15,11 @@ export interface ConceptNode {
   estimatedMinutes: number;
   description: string;
   prerequisites: string[]; // ids of prerequisite concepts
+  dependents?: string[];   // ids of concepts that depend on this one (computed)
   keyFormulas?: string[];
   dayAssigned?: number;
 }
+
 
 export interface DayPlan {
   dayNumber: number;

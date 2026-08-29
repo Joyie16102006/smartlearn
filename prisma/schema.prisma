@@ -108,6 +108,8 @@ model ConceptNode {
   description       String
   dayAssigned       Int?
   keyFormulas       String?        // JSON string array of formulas
+  prerequisites     String?        // JSON string array of prerequisite concept IDs
+  dependents        String?        // JSON string array of dependent concept IDs (computed)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -118,6 +120,7 @@ model ConceptNode {
   mistakeLogs       MistakeLog[]
   revisions         RevisionNote[]
 }
+
 
 model ConceptEdge {
   id             String   @id @default(cuid())

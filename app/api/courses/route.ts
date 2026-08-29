@@ -242,6 +242,13 @@ export async function POST(req: Request) {
             description: c.description,
             dayAssigned: c.dayAssigned,
             keyFormulas: c.keyFormulas ? JSON.stringify(c.keyFormulas) : null,
+            // Store scoped prerequisite IDs mapped through conceptIdMap
+            prerequisites: JSON.stringify(
+              (c.prerequisites || []).map((origId: string) => conceptIdMap.get(origId) || origId)
+            ),
+            dependents: JSON.stringify(
+              (c.dependents || []).map((origId: string) => conceptIdMap.get(origId) || origId)
+            ),
           })),
         },
         daysList: {
