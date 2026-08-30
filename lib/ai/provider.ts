@@ -161,16 +161,53 @@ class GeminiProvider implements AIProvider {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: fullPrompt }] }],
-        // Temperature 0.4 — factual grounding for technical educational content
+        // Enable Google Search Grounding — gives Gemini live internet access to search for valid real-time course URLs
+        tools: [{ google_search: {} }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error (${response.status}): ${await response.text()}`);
+      // If tools/google_search fails for any reason, fallback to standard generation without tools
+      const fallbackRes = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
+        }),
+      });
+      if (!fallbackRes.ok) {
+        throw new Error(`Gemini API error (${fallbackRes.status}): ${await fallbackRes.text()}`);
+      }
+      const fallbackData = await fallbackRes.json();
+      return fallbackData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     }
+
     const data = await response.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Extract live web search grounded sources from Google Search
+    const groundingChunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (Array.isArray(groundingChunks) && groundingChunks.length > 0) {
+      const liveSources: string[] = [];
+      const seen = new Set<string>();
+
+      for (const chunk of groundingChunks) {
+        const uri = chunk?.web?.uri;
+        const title = chunk?.web?.title || "Web Reference";
+        if (uri && !seen.has(title)) {
+          seen.add(title);
+          liveSources.push(`- [${title}](${uri}) — Live web verified learning resource`);
+        }
+      }
+
+      if (liveSources.length > 0) {
+        text += `\n\n---\n\n## 🌐 Verified Online Sources (Google Search Grounded)\n\n${liveSources.slice(0, 6).join("\n")}\n`;
+      }
+    }
+
+    return text;
   }
 
   async generateJSON<T>(prompt: string, systemPrompt?: string): Promise<T> {

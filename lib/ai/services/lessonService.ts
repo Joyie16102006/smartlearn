@@ -357,11 +357,10 @@ ${studentLevel === "Advanced" ? "- Deep rigor, proofs, edge cases, research conn
         .replace(/\s*```\s*$/, "")
         .trim();
 
-      // Remove any AI-generated references/further reading section
-      // so we can replace it with our guaranteed programmatic one
+      // Clean up duplicate ungrounded reference headers if model generated raw text ones
       generatedMarkdown = generatedMarkdown
-        .replace(/\n---\n+##\s*[📚🔗]?\s*(References|Further Reading|Sources|Bibliography)[\s\S]*$/i, "")
-        .replace(/\n##\s*[📚🔗]?\s*(References|Further Reading|Sources|Bibliography)[\s\S]*$/i, "")
+        .replace(/\n---\n+##\s*[📚🔗]?\s*(References|Further Reading|Bibliography)[\s\S]*$/i, "")
+        .replace(/\n##\s*[📚🔗]?\s*(References|Further Reading|Bibliography)[\s\S]*$/i, "")
         .trimEnd();
     }
 
