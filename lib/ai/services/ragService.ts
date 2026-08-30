@@ -8,6 +8,7 @@ import { getAIProvider } from "../provider";
  * - Parse and scrape syllabus/article URLs and YouTube lecture references
  * - Semantic chunking into optimal context windows
  * - AI Knowledge distillation: Extracts key topics, formulas, prerequisite dependencies
+ * - Build ordered topic flowchart for Model 2 curriculum synthesis
  */
 
 export interface SourceChunk {
@@ -36,10 +37,26 @@ export interface ExtractedKnowledgeContext {
 
 export class RAGService {
   /**
+  /**
+   * Strips null bytes (\0, \u0000) and dangerous binary control characters
+   * that PostgreSQL text/varchar columns strictly reject (code 22021).
+   */
+  static cleanString(str: string): string {
+    if (!str || typeof str !== "string") return "";
+    return str
+      .replace(/\0/g, "")
+      .replace(/\u0000/g, "")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  }
+
+  /**
    * Filter out noisy preamble content from PDF text:
-   * - Pages that are nearly empty (< 120 chars after trim)
+   * - Pages that are nearly empty (< 100 chars after trim)
    * - Sections that are clearly cover/meta: copyright, preface, TOC, acknowledgements
-   * - Lines that are just page numbers or running headers
+   * - Hyphenated line-breaks from PDF reflow
+   * - Running headers (short repeated lines at top of each page)
+   * - Decorative separator lines (===, ---, ***)
+   * - Bare page numbers and single-word lines
    */
   static filterPDFNoise(rawText: string): string {
     const noiseHeadings = [
@@ -48,13 +65,32 @@ export class RAGService {
       /^(preface|foreword|acknowledgements?|dedication)\s*$/im,
       /^(about the author|about this book)\s*$/im,
       /^(index)\s*$/im,
+      /^(bibliography|references)\s*$/im,
     ];
 
-    const pageSegments = rawText.split(/\f|\n{4,}/);
+    // First pass: sanitize null bytes & control chars, rejoin hyphenated line-breaks from PDF reflow
+    let text = RAGService.cleanString(rawText).replace(/-\n([a-z])/g, "$1");
+
+    // Remove decorative separator lines
+    text = text.replace(/^[\s=\-_*•~]{4,}\s*$/gm, "");
+
+    const pageSegments = text.split(/\f|\n{4,}/);
+
+    // Detect running headers: lines < 60 chars that appear identically on 3+ pages
+    const lineFrequency = new Map<string, number>();
+    pageSegments.forEach((seg) => {
+      const firstLine = seg.trim().split("\n")[0]?.trim() || "";
+      if (firstLine.length > 0 && firstLine.length < 60) {
+        lineFrequency.set(firstLine, (lineFrequency.get(firstLine) || 0) + 1);
+      }
+    });
+    const runningHeaders = new Set(
+      [...lineFrequency.entries()].filter(([, count]) => count >= 3).map(([line]) => line)
+    );
 
     const contentPages = pageSegments.filter((segment) => {
       const trimmed = segment.trim();
-      if (trimmed.length < 120) return false;
+      if (trimmed.length < 100) return false;
       const firstLines = trimmed.slice(0, 300).toLowerCase();
       for (const noisePattern of noiseHeadings) {
         if (noisePattern.test(firstLines)) return false;
@@ -67,8 +103,14 @@ export class RAGService {
         .split("\n")
         .filter((line) => {
           const t = line.trim();
+          // Remove bare page numbers
           if (/^\d+$/.test(t)) return false;
+          // Remove very short lines
           if (t.length < 4) return false;
+          // Remove running headers
+          if (runningHeaders.has(t)) return false;
+          // Remove pure separator lines
+          if (/^[\-=_*]{3,}$/.test(t)) return false;
           return true;
         })
         .join("\n");
@@ -86,20 +128,21 @@ export class RAGService {
       // @ts-ignore
       const pdfParse = (await import("pdf-parse")).default || (await import("pdf-parse"));
       const data = await pdfParse(buffer);
-      const rawText = data.text || "";
+      const rawText = RAGService.cleanString(data.text || "");
       const filteredText = RAGService.filterPDFNoise(rawText);
       return {
-        text: filteredText || rawText,
+        text: RAGService.cleanString(filteredText || rawText),
         numPages: data.numpages || 1,
       };
     } catch (error: any) {
       console.warn("PDF Parse fallback / error:", error?.message || error);
       return {
-        text: buffer.toString("utf-8").slice(0, 10000),
+        text: RAGService.cleanString(buffer.toString("utf-8")).slice(0, 10000),
         numPages: 1,
       };
     }
   }
+
 
   /**
    * 2. Extract content from URLs (YouTube links, documentation, web articles)
@@ -146,54 +189,117 @@ export class RAGService {
   }
 
   /**
-   * 3. Deep Structural Extractor: Parses Units, Chapters, Sections, Subtopics, and Formulas from raw text
+   * 3. Deep Structural Extractor: Parses Units, Chapters, Sections, Subtopics, and Formulas
+   *
+   * Handles common syllabus formats:
+   *   - "UNIT I — Semiconductor Physics"
+   *   - "Unit-II: Transistors"
+   *   - "Module 3 — BJT Amplifiers"
+   *   - "Chapter 5: Feedback"
+   *   - "1.1 Energy Band Theory"
+   *   - ALL-CAPS headings (4+ words)
+   *   - Bold markdown headings (## or **)
    */
   static extractDocumentStructure(rawText: string): ExtractedUnit[] {
     const lines = rawText.replace(/\r\n/g, "\n").split("\n");
     const units: ExtractedUnit[] = [];
     let currentUnit: ExtractedUnit | null = null;
 
-    const unitRegex = /^(?:UNIT|MODULE|CHAPTER|PART|SECTION)\s+([IVX0-9]+)[\s\-\—:.]+(.*)/i;
-    const sectionHeaderRegex = /^[0-9]+(?:\.[0-9]+)*\s+([A-Z][A-Za-z0-9\s\-\(\)\/\&]{3,60})$/;
-    const formulaRegex = /[=≈]|\b(?:exp|log|sin|cos|sqrt|\^|\b[VIRECP]\s*=\s*)/;
+    // Matches: UNIT I, UNIT-II, Unit 3, MODULE 1, Chapter 5, PART II, SECTION A
+    const unitRegex = /^(?:UNIT|MODULE|CHAPTER|PART|SECTION)\s*[-–]?\s*([IVXivx0-9A-Z]+)\s*[:\-–—.]?\s*(.*)/i;
+    // Matches: 1.1 Topic Name, 2.3.1 Sub-Topic
+    const sectionHeaderRegex = /^(\d+(?:\.\d+)*)\s+([A-Z][A-Za-z0-9\s\-\(\)\/\&\,]{3,70})$/;
+    // Matches markdown headings: ## Topic Name or **Topic Name**
+    const markdownHeadingRegex = /^#{1,3}\s+(.+)$|^\*{1,2}([^*]+)\*{1,2}\s*$/;
+    // ALL-CAPS lines that are likely section headings (4-10 meaningful words)
+    const allCapsHeadingRegex = /^[A-Z][A-Z0-9\s\-\&\/\(\)]{15,80}$/;
+
+    // Enhanced formula detection: LaTeX, Greek symbols, EE/Physics patterns
+    const formulaRegex =
+      /[=≈∝∑∫∂αβγδεζηθλμνπρσφωΩ]|V_|I_|R_|Z_|H\(s\)|F\(s\)|jω|\b(exp|log|ln|sin|cos|tan|sqrt|lim|d\/dt)\b|\^[0-9]|\b[VIRECP]\s*=/;
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.length < 3) continue;
 
+      // --- Unit / Module / Chapter heading ---
       const unitMatch = trimmed.match(unitRegex);
       if (unitMatch) {
         if (currentUnit && (currentUnit.subtopics.length > 0 || currentUnit.formulas.length > 0)) {
           units.push(currentUnit);
         }
-        const rawTitle = unitMatch[2]?.trim() || `Unit ${unitMatch[1]}`;
+        const rawTitle = (unitMatch[2] || "").trim();
         currentUnit = {
-          title: rawTitle.replace(/^[—\-\:\.]\s*/, "").trim() || `Unit ${unitMatch[1]}`,
+          title:
+            rawTitle.replace(/^[—\-\:\.\s]+/, "").trim() ||
+            `${trimmed.match(/^[A-Za-z]+/)?.[0] || "Unit"} ${unitMatch[1]}`,
           subtopics: [],
           formulas: [],
         };
         continue;
       }
 
+      // --- Numbered section heading (1.1 Topic Name) ---
       const sectionMatch = trimmed.match(sectionHeaderRegex);
       if (sectionMatch) {
         if (!currentUnit) {
           currentUnit = { title: "Foundations & Core Principles", subtopics: [], formulas: [] };
         }
-        currentUnit.subtopics.push(sectionMatch[1].trim());
+        const topicName = sectionMatch[2].trim();
+        if (!currentUnit.subtopics.includes(topicName)) {
+          currentUnit.subtopics.push(topicName);
+        }
         continue;
       }
 
+      // --- Markdown headings ---
+      const mdMatch = trimmed.match(markdownHeadingRegex);
+      if (mdMatch) {
+        const heading = (mdMatch[1] || mdMatch[2] || "").trim();
+        if (heading.length >= 4 && heading.length <= 80) {
+          if (!currentUnit) {
+            currentUnit = { title: heading, subtopics: [], formulas: [] };
+          } else if (!currentUnit.subtopics.includes(heading)) {
+            currentUnit.subtopics.push(heading);
+          }
+          continue;
+        }
+      }
+
+      // --- ALL-CAPS heading candidate ---
+      if (allCapsHeadingRegex.test(trimmed) && trimmed.split(" ").length >= 3) {
+        const titleCased = trimmed
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+        if (!currentUnit) {
+          currentUnit = { title: titleCased, subtopics: [], formulas: [] };
+        } else if (!currentUnit.subtopics.includes(titleCased)) {
+          currentUnit.subtopics.push(titleCased);
+        }
+        continue;
+      }
+
+      // --- Content lines: formulas and sub-topics ---
       if (currentUnit) {
-        const segments = trimmed.split(/[,;\n•]+/).map((s) => s.trim()).filter((s) => s.length > 2);
+        const segments = trimmed
+          .split(/[,;•\n]+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 2);
+
         for (const segment of segments) {
-          if (formulaRegex.test(segment) && segment.length < 90) {
+          if (formulaRegex.test(segment) && segment.length < 100) {
             if (!currentUnit.formulas.includes(segment)) {
               currentUnit.formulas.push(segment);
             }
-          } else if (segment.length >= 3 && segment.length <= 90) {
-            const cleanTopic = segment.replace(/^[0-9\.\-\*\•\s]+/, "").trim();
-            if (cleanTopic.length >= 3 && !currentUnit.subtopics.includes(cleanTopic)) {
+          } else if (segment.length >= 4 && segment.length <= 90) {
+            const cleanTopic = segment.replace(/^[0-9\.a-z]\.\s+/, "").replace(/^[\-\*\•\s]+/, "").trim();
+            if (
+              cleanTopic.length >= 4 &&
+              !currentUnit.subtopics.includes(cleanTopic) &&
+              // Avoid capturing prose sentences (ends with period mid-sentence)
+              !/[,:]$/.test(cleanTopic)
+            ) {
               currentUnit.subtopics.push(cleanTopic);
             }
           }
@@ -258,10 +364,10 @@ export class RAGService {
     if (units.length > 0) {
       units.forEach((u) => {
         keyTopics.push(u.title);
-        u.subtopics.slice(0, 4).forEach((st) => {
+        u.subtopics.slice(0, 5).forEach((st) => {
           if (!keyTopics.includes(st)) keyTopics.push(st);
         });
-        u.formulas.forEach((f) => {
+        u.formulas.slice(0, 3).forEach((f) => {
           if (!keyFormulas.includes(f)) keyFormulas.push(f);
         });
       });
@@ -275,17 +381,19 @@ export class RAGService {
       keyTopics.push(...(headerTopics.length > 0 ? headerTopics.slice(0, 15) : ["Core Foundations", "Applied Principles"]));
     }
 
-    // Build rich text preview for AI
+    // Build ordered unit flowchart preview for Model 2
     let fullTextPreview = "";
     if (units.length > 0) {
       fullTextPreview = units
         .map(
           (u, i) =>
-            `Unit ${i + 1}: ${u.title}\n  Topics: ${u.subtopics.join(", ")}\n  Formulas: ${u.formulas.join(", ")}`
+            `Unit ${i + 1}: ${u.title}\n  Topics: ${u.subtopics.slice(0, 6).join(", ")}\n  Formulas: ${u.formulas.slice(0, 3).join(" | ")}`
         )
         .join("\n\n");
     } else {
-      fullTextPreview = cleanContent.slice(0, 8000);
+      // Fall back to raw text but intelligently trimmed from start of actual content
+      const contentStart = Math.min(500, cleanContent.length);
+      fullTextPreview = cleanContent.slice(contentStart, contentStart + 8000);
     }
 
     return {
@@ -300,6 +408,9 @@ export class RAGService {
 
   /**
    * 5. AI-Powered Knowledge Distillation (Model 1 Deep RAG)
+   *
+   * Anti-hallucination: sends ALL extracted unit titles/subtopics (not raw text slice)
+   * to the AI so it only summarizes what was actually extracted.
    */
   static async distillKnowledgeContext(params: {
     courseTitle: string;
@@ -313,27 +424,44 @@ export class RAGService {
   }> {
     const ai = getAIProvider();
 
-    const systemPrompt = `You are Model 1: The SmartLearn Knowledge & Source Ingestion Engine.
-Analyze the source text and distill it into structured learning concepts.
+    // Extract structure first so we send structured data to AI (not raw text slice)
+    const units = RAGService.extractDocumentStructure(params.extractedText);
+    const unitsContext =
+      units.length > 0
+        ? units
+            .map(
+              (u, i) =>
+                `Unit ${i + 1}: ${u.title}\n  Subtopics: ${u.subtopics.join(", ")}\n  Formulas: ${u.formulas.join(", ")}`
+            )
+            .join("\n\n")
+        : params.extractedText.slice(0, 12000);
 
-Return ONLY a valid JSON object matching this exact schema:
+    const systemPrompt = `You are Model 1: The SmartLearn Knowledge & Source Ingestion Engine.
+Analyze the STRUCTURED source content below and distill it into precise learning concepts.
+
+HALLUCINATION GUARD — CRITICAL RULES:
+1. Only use topics, formulas, and domain vocabulary explicitly present in the source material below.
+2. Do NOT invent topic names, chapter titles, or formulas that are not in the source.
+3. Use the EXACT terminology from the source.
+4. If the source is sparse, report what is there — do not pad with generic content.
+
+Return ONLY a valid JSON object (no markdown, no explanation) matching this exact schema:
 {
-  "summary": "2-3 sentence overview of the syllabus domain",
-  "chapters": ["Chapter 1: ...", "Chapter 2: ..."],
-  "formulas": ["Formula 1", "Formula 2"],
-  "keyTerms": ["Term 1", "Term 2", "Term 3"]
+  "summary": "2-3 sentence overview of the syllabus domain based on the source",
+  "chapters": ["Exact chapter/unit title 1", "Exact chapter/unit title 2"],
+  "formulas": ["Exact formula 1", "Exact formula 2"],
+  "keyTerms": ["Domain term 1", "Domain term 2", "Domain term 3"]
 }`;
 
     const userPrompt = `Course: ${params.courseTitle}
 Goal: ${params.learningGoal}
 
-Source Material:
-${params.extractedText.slice(0, 8000)}
+Structured Source Content (ALL extracted units):
+${unitsContext}
 
-Distill the core knowledge units from the above source text.`;
+Distill the core knowledge units from the above source content. Stay strictly grounded to what is in the source.`;
 
     if (!ai) {
-      const units = RAGService.extractDocumentStructure(params.extractedText);
       return {
         summary: `Syllabus material for ${params.courseTitle} focused on ${params.learningGoal}.`,
         chapters: units.length > 0 ? units.map((u) => u.title) : ["Core Foundations", "Applied Principles"],
@@ -350,17 +478,40 @@ Distill the core knowledge units from the above source text.`;
         keyTerms: string[];
       }>(userPrompt, systemPrompt);
 
-      return result;
+      // Validate — reject suspiciously generic results
+      if (
+        result &&
+        Array.isArray(result.chapters) &&
+        result.chapters.length > 0 &&
+        !result.chapters[0].toLowerCase().includes("chapter 1")
+      ) {
+        return result;
+      }
+
+      throw new Error("AI returned generic/invalid chapters, using structural fallback");
     } catch (err) {
       console.warn("Model 1 AI distillation fallback:", err);
-      const units = RAGService.extractDocumentStructure(params.extractedText);
       return {
-        summary: `Syllabus material for ${params.courseTitle} focused on ${params.learningGoal}.`,
+        summary: `Syllabus material for ${params.courseTitle} covering ${units.map((u) => u.title).join(", ")}.`,
         chapters: units.length > 0 ? units.map((u) => u.title) : ["Core Foundations", "Applied Principles"],
-        formulas: units.flatMap((u) => u.formulas),
-        keyTerms: [params.courseTitle, "Fundamentals", "Applications"],
+        formulas: units.flatMap((u) => u.formulas).slice(0, 10),
+        keyTerms: units.flatMap((u) => u.subtopics.slice(0, 2)).slice(0, 10),
       };
     }
   }
-}
 
+  /**
+   * 6. Build ordered topic flowchart for Model 2 curriculum synthesis.
+   *    Returns a dependency-ordered list of unit → subtopic chains.
+   */
+  static buildTopicFlowchart(units: ExtractedUnit[]): string {
+    if (units.length === 0) return "";
+    return units
+      .map((u, i) => {
+        const prereq = i > 0 ? ` (requires: ${units[i - 1].title})` : " (entry point)";
+        const topicList = u.subtopics.slice(0, 8).join(" → ");
+        return `[${i + 1}] ${u.title}${prereq}\n    Learning path: ${topicList || "Core principles and applications"}`;
+      })
+      .join("\n\n");
+  }
+}

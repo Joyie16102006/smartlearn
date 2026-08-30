@@ -82,20 +82,20 @@ ${dayPlan.mistakeConcept ? `Previous Student Mistake to Address: ${dayPlan.mista
     }
 
     if (!generated) {
+      const formulas = dayPlan.concept.keyFormulas ? JSON.parse(dayPlan.concept.keyFormulas) : [];
       generated = {
         title: `Quick Revision: ${dayPlan.concept.name}`,
-        summary: `Active recall overview for ${dayPlan.concept.name}. Review governing equations and verify corner cases.`,
-        keyFormulas: [
-          dayPlan.concept.keyFormulas ? JSON.parse(dayPlan.concept.keyFormulas)[0] : "2^m = N ⟹ m = log2(N)",
-        ],
+        summary: `Active recall overview for ${dayPlan.concept.name}. Review governing equations, fundamental definitions, and boundary conditions.`,
+        keyFormulas: formulas.length > 0 ? formulas.slice(0, 2) : [],
         keyPoints: [
-          "Always verify signal polarity and enable inputs.",
-          "Check toroidal adjacency in K-Maps before creating 2-cell groups.",
-          "Verify input residue functions with truth table outputs.",
+          `Verify all initial state assumptions and operational limits for ${dayPlan.concept.name}.`,
+          `Ensure correct algebraic steps and unit consistency in numerical problems.`,
+          `Cross-reference output values against standard analytical benchmarks.`,
         ],
-        mistakeTip: dayPlan.mistakeConcept || "Check corner wrap-around cells before grouping pairs.",
+        mistakeTip: dayPlan.mistakeConcept || `Pay close attention to boundary constraints and sign conventions in ${dayPlan.concept.name}.`,
       };
     }
+
 
     // Save in database
     await prisma.revisionNote.create({

@@ -164,12 +164,6 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
 
   const handleOpenExplain = async (conceptOrId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const mock = getExplanationById(conceptOrId);
-    if (mock) {
-      setSelectedExplanation(mock);
-      setIsModalOpen(true);
-      return;
-    }
     try {
       const res = await fetch("/api/ai/explain", {
         method: "POST",
@@ -189,16 +183,23 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
           example: data.example,
           formulaOrDiagram: data.keyFormula || undefined,
           deeperExplanation: {
-            breakdown: data.tip || "",
-            keyTakeaways: [data.tip || ""],
+            breakdown: data.tip || "Focus on the foundational operational mechanisms and governing principles.",
+            keyTakeaways: [data.tip || "Verify parameter bounds and operating constraints."],
           },
         });
         setIsModalOpen(true);
+        return;
       }
     } catch (err) {
       console.error("Failed to fetch explanation:", err);
     }
+    const mock = getExplanationById(conceptOrId);
+    if (mock) {
+      setSelectedExplanation(mock);
+      setIsModalOpen(true);
+    }
   };
+
 
   const handleSubmitQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,7 +347,8 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
 
         {/* ── MIDDLE PANEL: AI Lecture Renderer ── */}
         <div className="flex-1 overflow-y-auto bg-white">
-          <div className="max-w-2xl mx-auto px-8 py-7 space-y-6">
+          <div className="max-w-3xl lg:max-w-4xl mx-auto px-8 sm:px-12 py-8 space-y-8">
+
 
             {/* Header badge & Version info */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-100">

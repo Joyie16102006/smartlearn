@@ -16,9 +16,8 @@ export default function DashboardPage() {
     fetch("/api/courses")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setCourses(data);
-        }
+        const list = Array.isArray(data) ? data : (data?.courses || []);
+        setCourses(list);
       })
       .catch((err) => console.warn("Failed to fetch courses from database:", err))
       .finally(() => setIsLoading(false));

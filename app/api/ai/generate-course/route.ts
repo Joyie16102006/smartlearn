@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { callGemini, parseGeminiJSON } from "@/lib/gemini";
+import { CurriculumService } from "@/lib/ai/services/curriculumService";
 import { ConceptNode, DayPlan } from "@/types";
 
 export async function POST(req: Request) {
@@ -15,23 +16,30 @@ Given a course topic, student target goals, syllabus materials, and time budget,
 1. An ordered Directed Acyclic Graph (DAG) of 6 to 10 foundational Concept Nodes for an interactive flowchart.
 2. A day-wise syllabus split for ${totalDays || 30} days, mapping each day to a concept, specific topics, and estimated duration.
 
-Output STRICTLY valid JSON matching this schema:
+HALLUCINATION GUARD — MANDATORY:
+- Only generate concepts, topics and formulas that are genuinely part of the course domain.
+- Do NOT use generic placeholder names like "System Architecture & Synthesis", "Core Axioms", or "Minimization & Performance Optimization" unless these are genuinely core to the course.
+- Every concept name must be a real, specific, domain-accurate academic concept.
+- The difficulty of all content must be calibrated to the student's knowledge level: ${level || "Intermediate"}.
+- Subtopics must be distinct and progressive — each should correspond to one focused study session.
+
+Output STRICTLY valid JSON matching this schema (NO markdown, no explanation outside JSON):
 {
   "description": "Comprehensive course description",
-  "category": "Domain category (e.g. Hardware Engineering, Software Development, Data Science, Math)",
+  "category": "Domain category (e.g. Electronic Devices & Circuits, Computer Science, Applied Mathematics)",
   "concepts": [
     {
       "id": "c-unique-id",
-      "name": "Concept Name",
+      "name": "Specific Domain Concept Name",
       "slug": "concept-slug",
       "status": "completed" | "current" | "upcoming",
       "masteryPercentage": 0,
       "importance": "high" | "medium" | "low",
       "difficulty": "Beginner" | "Intermediate" | "Advanced",
       "estimatedMinutes": 90,
-      "description": "Detailed explanation of what this node teaches",
+      "description": "What this concept teaches, grounded in the domain",
       "prerequisites": ["prerequisite-id"],
-      "keyFormulas": ["Formula 1", "Formula 2"],
+      "keyFormulas": ["Exact domain formula 1", "Exact domain formula 2"],
       "dayAssigned": 1
     }
   ],
@@ -41,7 +49,7 @@ Output STRICTLY valid JSON matching this schema:
       "title": "Day Title",
       "conceptId": "matching-c-id",
       "status": "completed" | "current" | "locked",
-      "topicsCovered": ["Topic A", "Topic B", "Topic C"],
+      "topicsCovered": ["Specific Topic A", "Specific Topic B"],
       "durationMinutes": 60,
       "sourceLink": {
         "title": "Resource title",
@@ -58,10 +66,12 @@ Set concept #1 to status "current" (mastery 0%) and the rest to "upcoming". Set 
     const userPrompt = `Create a complete adaptive curriculum flowchart:
 Course Title: ${title}
 Learning Goal: ${goal || "Master all foundational and advanced topics systematically"}
-Knowledge Level: ${level || "Beginner"}
+Student Knowledge Level: ${level || "Intermediate"}
 Total Time Budget: ${totalDays || 30} Days, ${minutesPerDay || 60} Minutes/Day
 Uploaded Syllabi/Materials: ${files && files.length > 0 ? files.join(", ") : "Standard textbook curriculum"}
-Source Links / Playlists: ${sources && sources.length > 0 ? sources.join(", ") : "Curated high-yield video lectures"}`;
+Source Links / Playlists: ${sources && sources.length > 0 ? sources.join(", ") : "Curated high-yield video lectures"}
+
+Generate a domain-accurate, level-appropriate curriculum for this course. Do NOT hallucinate generic concept names.`;
 
     try {
       const rawText = await callGemini(userPrompt, systemPrompt);
@@ -74,112 +84,57 @@ Source Links / Playlists: ${sources && sources.length > 0 ? sources.join(", ") :
 
       return NextResponse.json(parsed);
     } catch (apiError: any) {
-      console.warn("Gemini API not configured or failed, using structured template generator:", apiError?.message);
+      console.warn("Gemini API not configured or failed, using CurriculumService fallback:", apiError?.message);
 
-      // Create a tailored structured curriculum based on the title and total days
-      const daysCount = Math.max(5, Math.min(totalDays || 30, 45));
-      const category = title.toLowerCase().includes("python") || title.toLowerCase().includes("code") || title.toLowerCase().includes("react")
-        ? "Software Development"
-        : title.toLowerCase().includes("data") || title.toLowerCase().includes("algo")
-        ? "Computer Science"
-        : "Engineering & Applied Sciences";
-
-      const generatedConcepts: ConceptNode[] = [
-        {
-          id: `c-${title.toLowerCase().replace(/\s+/g, "-")}-fundamentals`,
-          name: `${title} Fundamentals & Core Axioms`,
-          slug: "fundamentals",
-          status: "current",
-          masteryPercentage: 0,
-          importance: "high",
-          difficulty: "Beginner",
-          estimatedMinutes: 90,
-          dayAssigned: 1,
-          description: `Foundational definitions, standard terminology, and primary governing equations in ${title}.`,
-          prerequisites: [],
-          keyFormulas: ["Governing Law: Y = f(X)", "Efficiency: η = Output / Input × 100%"]
-        },
-        {
-          id: `c-${title.toLowerCase().replace(/\s+/g, "-")}-architecture`,
-          name: "System Architecture & Synthesis",
-          slug: "architecture",
-          status: "upcoming",
-          masteryPercentage: 0,
-          importance: "high",
-          difficulty: "Intermediate",
-          estimatedMinutes: 120,
-          dayAssigned: Math.round(daysCount * 0.25),
-          description: `Structural analysis, component interconnections, and algebraic optimization.`,
-          prerequisites: [`c-${title.toLowerCase().replace(/\s+/g, "-")}-fundamentals`],
-          keyFormulas: ["Transfer Function: H(s) = Y(s) / X(s)"]
-        },
-        {
-          id: `c-${title.toLowerCase().replace(/\s+/g, "-")}-optimization`,
-          name: "Minimization & Performance Optimization",
-          slug: "optimization",
-          status: "upcoming",
-          masteryPercentage: 0,
-          importance: "high",
-          difficulty: "Intermediate",
-          estimatedMinutes: 120,
-          dayAssigned: Math.round(daysCount * 0.5),
-          description: `Techniques for reducing latency, computational overhead, and error rates.`,
-          prerequisites: [`c-${title.toLowerCase().replace(/\s+/g, "-")}-architecture`],
-          keyFormulas: ["Time Complexity: T(n) = O(log n)"]
-        },
-        {
-          id: `c-${title.toLowerCase().replace(/\s+/g, "-")}-advanced-application`,
-          name: "Advanced Implementation & Real-World Synthesis",
-          slug: "advanced-synthesis",
-          status: "upcoming",
-          masteryPercentage: 0,
-          importance: "high",
-          difficulty: "Advanced",
-          estimatedMinutes: 150,
-          dayAssigned: Math.round(daysCount * 0.8),
-          description: `End-to-end integration, edge case handling, and diagnostic verification.`,
-          prerequisites: [`c-${title.toLowerCase().replace(/\s+/g, "-")}-optimization`],
-          keyFormulas: ["System Reliability: R(t) = e^(-λt)"]
-        }
-      ];
-
-      const generatedDays: DayPlan[] = Array.from({ length: daysCount }, (_, i) => {
-        const dayNum = i + 1;
-        const conceptIndex = Math.min(
-          generatedConcepts.length - 1,
-          Math.floor((i / daysCount) * generatedConcepts.length)
-        );
-        const assignedConcept = generatedConcepts[conceptIndex];
-
-        return {
-          dayNumber: dayNum,
-          title: `Day ${dayNum}: ${assignedConcept.name} (Part ${((i % 3) + 1)})`,
-          conceptId: assignedConcept.id,
-          status: dayNum === 1 ? "current" : "locked",
-          topicsCovered: [
-            `${assignedConcept.name} core principles`,
-            `Mathematical derivations and worked examples`,
-            `Diagnostic self-test and verification`
-          ],
-          durationMinutes: minutesPerDay || 60,
-          sourceLink: {
-            title: `${title} Lecture Module ${dayNum}`,
-            source: sources && sources[0] ? "User Linked Playlist" : "SmartLearn Curated Courseware",
-            url: sources && sources[0] ? sources[0] : "https://youtube.com",
-            duration: `${minutesPerDay || 60} mins`
-          }
-        };
+      // Use the CurriculumService domain-adaptive fallback (no hardcoded generic concepts)
+      const curriculum = await CurriculumService.generateCurriculum({
+        title,
+        goal: goal || "Master all foundational and advanced topics systematically",
+        level: level || "Intermediate",
+        totalDays: Math.max(5, Math.min(totalDays || 30, 45)),
+        minutesPerDay: minutesPerDay || 60,
+        sourceContext: sources && sources.length > 0 ? `Source references: ${sources.join(", ")}` : "",
       });
 
+      // Map GeneratedConcept[] to ConceptNode[] for frontend compatibility
+      const conceptNodes: ConceptNode[] = curriculum.concepts.map((c, i) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        status: i === 0 ? "current" : "upcoming",
+        masteryPercentage: 0,
+        importance: c.importance,
+        difficulty: c.difficulty,
+        estimatedMinutes: c.estimatedMinutes,
+        dayAssigned: c.dayAssigned,
+        description: c.description,
+        prerequisites: c.prerequisites,
+        keyFormulas: c.keyFormulas || [],
+      }));
+
+      const daysList: DayPlan[] = curriculum.daysList.map((d, i) => ({
+        dayNumber: d.dayNumber,
+        title: d.title,
+        conceptId: d.conceptId,
+        status: i === 0 ? "current" : "locked",
+        topicsCovered: d.topicsCovered,
+        durationMinutes: d.durationMinutes,
+        sourceLink: {
+          title: `${title} — Day ${d.dayNumber} Materials`,
+          source: sources && sources[0] ? "User Linked Playlist" : "SmartLearn Curated Courseware",
+          url: sources && sources[0] ? sources[0] : "https://youtube.com",
+          duration: `${d.durationMinutes} mins`,
+        },
+      }));
+
       return NextResponse.json({
-        description: `Comprehensive AI-generated curriculum designed to master ${title} in ${daysCount} days with adaptive pacing.`,
-        category,
-        concepts: generatedConcepts,
-        daysList: generatedDays
+        description: curriculum.description,
+        category: curriculum.category,
+        concepts: conceptNodes,
+        daysList,
       });
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Failed to generate course" }, { status: 500 });
   }
 }
-

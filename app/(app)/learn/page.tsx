@@ -26,9 +26,10 @@ export default function TodayPlanPage() {
     fetch("/api/courses")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setCourses(data);
-          setSelectedCourseId(data[0].id);
+        const list = Array.isArray(data) ? data : (data?.courses || []);
+        if (list.length > 0) {
+          setCourses(list);
+          setSelectedCourseId(list[0].id);
         }
       })
       .catch((err) => console.warn("Failed to fetch courses from database:", err))

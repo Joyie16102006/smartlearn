@@ -1,32 +1,66 @@
+@import "katex/dist/katex.min.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #f5f6fa;
-  --foreground: #202224;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #202224;
-  --border: #e0e4ec;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #f5f6fa;
-    --foreground: #202224;
-    --card: #ffffff;
-    --card-foreground: #202224;
-    --border: #e0e4ec;
+    --background: #090d16;
+    --foreground: #f1f5f9;
+    --card: #0f172a;
+    --card-foreground: #f1f5f9;
+    --border: #1e293b;
   }
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ChatGPT-Style KaTeX Math & Formula Cards
+   ───────────────────────────────────────────────────────────── */
+
+/* Standalone Display Math / Equations ($$ ... $$) */
+.katex-display {
+  position: relative;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem !important;
+  margin: 1.5rem 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  text-align: center;
+}
+
+.katex-display > .katex {
+  font-size: 1.22em !important;
+  color: #0f172a;
+  display: inline-block;
+  line-height: 1.6;
+}
+
+/* Inline Math ($...$) */
+.katex {
+  font-size: 1.05em !important;
+  color: #0f172a;
+  font-weight: 500;
+  padding: 0 2px;
 }
 
 /* Custom subtle scrollbar */
@@ -47,3 +81,4 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.6);
 }
+

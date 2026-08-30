@@ -108,7 +108,7 @@ export async function callAI(
 
   // 3. Google Gemini
   if (geminiKey) {
-    const model = getEnv("GEMINI_MODEL") || "gemini-1.5-flash";
+    const model = getEnv("GEMINI_MODEL") || "gemini-2.5-flash";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
     const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 

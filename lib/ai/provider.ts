@@ -137,16 +137,19 @@ class GroqProvider implements AIProvider {
 }
 
 /**
- * Google Gemini Provider
+/**
+ * Google Gemini Provider (Gemini 2.5 Flash)
+ * Powers Model 3 (Daily Educational Workspace Lesson Generator)
  */
 class GeminiProvider implements AIProvider {
-  name = "Gemini";
+  name: string;
   private apiKey: string;
   private model: string;
 
   constructor(apiKey: string, model?: string) {
     this.apiKey = apiKey;
-    this.model = model || "gemini-1.5-flash";
+    this.model = model || getEnv("GEMINI_MODEL") || "gemini-2.5-flash";
+    this.name = `Google Gemini (${this.model})`;
   }
 
   async generateText(prompt: string, systemPrompt?: string): Promise<string> {
@@ -158,7 +161,8 @@ class GeminiProvider implements AIProvider {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+        // Temperature 0.4 — factual grounding for technical educational content
+        generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
       }),
     });
 
@@ -170,7 +174,28 @@ class GeminiProvider implements AIProvider {
   }
 
   async generateJSON<T>(prompt: string, systemPrompt?: string): Promise<T> {
-    const text = await this.generateText(prompt, systemPrompt);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: fullPrompt }] }],
+        // Force JSON output to eliminate markdown wrapper hallucinations
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          response_mime_type: "application/json",
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error (${response.status}): ${await response.text()}`);
+    }
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     return parseJSON<T>(text);
   }
 }
@@ -221,29 +246,37 @@ class OpenAIProvider implements AIProvider {
 }
 
 /**
- * Factory to get the active AI Provider based on configured environment keys
- * Prioritizes NVIDIA Nemotron 550B for deep curriculum & knowledge synthesis.
+ * Factory to get the active AI Provider based on configured environment keys and service role.
+ * Model 3 (Daily Lesson Generator) utilizes Google Gemini 2.5 Flash.
  */
-export function getAIProvider(): AIProvider | null {
+export function getAIProvider(serviceType?: "curriculum" | "lesson" | "assessment" | "revision" | "assistant" | "model3" | "model1" | "model2" | "model4" | "model5" | "model6" | string): AIProvider | null {
+  const geminiKey = getEnv("GEMINI_API_KEY");
   const nvidiaKey = getEnv("NVIDIA_API_KEY") || getEnv("NVAPI_KEY");
+  const groqKey = getEnv("GROQ_API_KEY");
+  const openaiKey = getEnv("OPENAI_API_KEY");
+
+  // If Model 3 (Daily Lesson Generator) is requested, prioritize Google Gemini 2.5 Flash
+  if ((serviceType === "model3" || serviceType === "lesson") && geminiKey && !geminiKey.startsWith("#")) {
+    return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
+  }
+
+  // General provider resolution
   if (nvidiaKey && !nvidiaKey.startsWith("#")) {
     return new NvidiaProvider(nvidiaKey, getEnv("NVIDIA_MODEL"));
   }
 
-  const groqKey = getEnv("GROQ_API_KEY");
   if (groqKey && !groqKey.startsWith("#")) {
     return new GroqProvider(groqKey, getEnv("GROQ_MODEL"));
   }
 
-  const geminiKey = getEnv("GEMINI_API_KEY");
   if (geminiKey && !geminiKey.startsWith("#")) {
-    return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL"));
+    return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
   }
 
-  const openaiKey = getEnv("OPENAI_API_KEY");
   if (openaiKey && !openaiKey.startsWith("#")) {
     return new OpenAIProvider(openaiKey, getEnv("OPENAI_MODEL"));
   }
 
   return null;
 }
+

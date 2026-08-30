@@ -4,10 +4,35 @@ import { CurriculumService } from "@/lib/ai/services/curriculumService";
 import { RAGService, ExtractedUnit } from "@/lib/ai/services/ragService";
 
 /**
+ * Strips null bytes (\0, \u0000) and dangerous binary control characters
+ * that PostgreSQL text/varchar columns strictly reject (code 22021).
+ */
+function sanitizeForPostgres<T>(obj: T): T {
+  if (typeof obj === "string") {
+    return obj
+      .replace(/\0/g, "")
+      .replace(/\u0000/g, "")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ") as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForPostgres) as unknown as T;
+  }
+  if (obj !== null && typeof obj === "object") {
+    const res: any = {};
+    for (const key of Object.keys(obj)) {
+      res[key] = sanitizeForPostgres((obj as any)[key]);
+    }
+    return res;
+  }
+  return obj;
+}
+
+/**
  * GET /api/courses
  * Fetches all courses with full concepts, sources, and day plans from Supabase.
  */
 export async function GET() {
+
   try {
     const user = await prisma.user.findFirst();
     if (!user) {
@@ -39,10 +64,10 @@ export async function GET() {
       })),
     }));
 
-    return NextResponse.json({ courses: parsedCourses });
+    return NextResponse.json(parsedCourses);
   } catch (error: any) {
     console.error("GET /api/courses error:", error);
-    return NextResponse.json({ courses: [], error: error.message }, { status: 500 });
+    return NextResponse.json([], { status: 500 });
   }
 }
 
@@ -209,74 +234,77 @@ export async function POST(req: Request) {
       };
     });
 
-    // 4. Save Course in Supabase database
-    const course = await prisma.course.create({
-      data: {
-        id: courseId,
-        userId: user.id,
-        title: title || "New Course",
-        category: curriculum.category || "Technical Engineering",
-        goal: goal || "Achieve complete topic mastery",
-        currentLevel: level || "Intermediate",
-        totalDays: totalDays,
-        currentDay: 1,
-        progressPercentage: 0,
-        minutesPerDay: minutesPerDay,
-        preferredTime: "06:00 PM",
-        currentTopic: scopedDaysList[0]?.title || "Foundations",
-        nextSessionTime: "Tomorrow at 06:00 PM",
-        nextSessionTopic: scopedDaysList[1]?.title || "Core Architecture",
-        description: curriculum.description,
-        materialsCount: sourceRecords.length || 1,
-        streakDays: 0,
-        sources: {
-          create: sourceRecords.map((s) => ({
-            type: s.type,
-            title: s.title,
-            url: s.url,
-            fileName: s.fileName,
-            extractedText: s.extractedText,
-          })),
-        },
-        concepts: {
-          create: scopedConcepts.map((c) => ({
-            id: c.id,
-            name: c.name,
-            slug: c.slug,
-            status: c.dayAssigned === 1 ? "current" : "upcoming",
-            masteryPercentage: 0,
-            importance: c.importance,
-            difficulty: c.difficulty,
-            estimatedMinutes: c.estimatedMinutes,
-            description: c.description,
-            dayAssigned: c.dayAssigned,
-            keyFormulas: c.keyFormulas ? JSON.stringify(c.keyFormulas) : null,
-            // Store scoped prerequisite IDs mapped through conceptIdMap
-            prerequisites: JSON.stringify(
-              (c.prerequisites || []).map((origId: string) => conceptIdMap.get(origId) || origId)
-            ),
-            dependents: JSON.stringify(
-              (c.dependents || []).map((origId: string) => conceptIdMap.get(origId) || origId)
-            ),
-          })),
-        },
-        daysList: {
-          create: scopedDaysList.map((d) => ({
-            dayNumber: d.dayNumber,
-            title: d.title,
-            conceptId: d.conceptId,
-            status: d.dayNumber === 1 ? "current" : "locked",
-            topicsCovered: JSON.stringify(d.topicsCovered),
-            durationMinutes: d.durationMinutes,
-          })),
-        },
+    // 4. Save Course in Supabase database (Sanitized to prevent Postgres 0x00 UTF-8 errors)
+    const courseData = sanitizeForPostgres({
+      id: courseId,
+      userId: user.id,
+      title: title || "New Course",
+      category: curriculum.category || "Technical Engineering",
+      goal: goal || "Achieve complete topic mastery",
+      currentLevel: level || "Intermediate",
+      totalDays: totalDays,
+      currentDay: 1,
+      progressPercentage: 0,
+      minutesPerDay: minutesPerDay,
+      preferredTime: "06:00 PM",
+      currentTopic: scopedDaysList[0]?.title || "Foundations",
+      nextSessionTime: "Tomorrow at 06:00 PM",
+      nextSessionTopic: scopedDaysList[1]?.title || "Core Architecture",
+      description: curriculum.description,
+      materialsCount: sourceRecords.length || 1,
+      streakDays: 0,
+      sources: {
+        create: sourceRecords.map((s) => ({
+          type: s.type,
+          title: s.title,
+          url: s.url,
+          fileName: s.fileName,
+          extractedText: s.extractedText,
+        })),
       },
+      concepts: {
+        create: scopedConcepts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          status: c.dayAssigned === 1 ? "current" : "upcoming",
+          masteryPercentage: 0,
+          importance: c.importance,
+          difficulty: c.difficulty,
+          estimatedMinutes: c.estimatedMinutes,
+          description: c.description,
+          dayAssigned: c.dayAssigned,
+          keyFormulas: c.keyFormulas ? JSON.stringify(c.keyFormulas) : null,
+          // Store scoped prerequisite IDs mapped through conceptIdMap
+          prerequisites: JSON.stringify(
+            (c.prerequisites || []).map((origId: string) => conceptIdMap.get(origId) || origId)
+          ),
+          dependents: JSON.stringify(
+            (c.dependents || []).map((origId: string) => conceptIdMap.get(origId) || origId)
+          ),
+        })),
+      },
+      daysList: {
+        create: scopedDaysList.map((d) => ({
+          dayNumber: d.dayNumber,
+          title: d.title,
+          conceptId: d.conceptId,
+          status: d.dayNumber === 1 ? "current" : "locked",
+          topicsCovered: JSON.stringify(d.topicsCovered),
+          durationMinutes: d.durationMinutes,
+        })),
+      },
+    });
+
+    const course = await prisma.course.create({
+      data: courseData,
       include: {
         concepts: true,
         daysList: true,
         sources: true,
       },
     });
+
 
     // Update user active courses count in database
     const activeCount = await prisma.course.count({ where: { userId: user.id } });

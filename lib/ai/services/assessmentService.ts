@@ -49,6 +49,7 @@ export class AssessmentService {
         },
       },
       include: {
+        course: true,
         concept: true,
         quizzes: {
           include: {
@@ -78,7 +79,8 @@ export class AssessmentService {
     }
 
     // Generate questions via AI
-    const provider = getAIProvider();
+    const provider = getAIProvider("assessment") || getAIProvider();
+    const topics: string[] = JSON.parse(dayPlan.topicsCovered || "[]");
     let generatedQuestions: Array<{
       questionText: string;
       options: string[];
@@ -88,12 +90,14 @@ export class AssessmentService {
 
     if (provider) {
       const systemPrompt = `You are SmartLearn AI Assessment Engine.
-Generate exactly 3 multiple choice diagnostic questions to test deep comprehension of the day's concept.
+Generate exactly 3 high-quality multiple choice diagnostic questions to test deep comprehension, formulas, and error diagnosis for the specific day's topic.
+Questions must be challenging, technically accurate, and specific to the given subject.
+
 Return strictly valid JSON matching:
 {
   "questions": [
     {
-      "questionText": "Clear technical question",
+      "questionText": "Clear, technically precise question",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctIndex": 0,
       "explanation": "Why this is correct and others are false."
@@ -101,10 +105,13 @@ Return strictly valid JSON matching:
   ]
 }`;
 
-      const userPrompt = `Generate a 3-question diagnostic quiz for:
-Course: ${courseId}
-Concept: ${dayPlan.concept.name}
-Day ${dayNumber}: ${dayPlan.title}`;
+      const userPrompt = `Course: ${dayPlan.course.title}
+Concept Unit: ${dayPlan.concept.name}
+Day ${dayNumber}: ${dayPlan.title}
+Topics Covered: ${topics.join(", ")}
+${dayPlan.concept.keyFormulas ? `Key Equations: ${dayPlan.concept.keyFormulas}` : ""}
+
+Generate 3 diagnostic multiple choice questions to assess mastery of today's topics.`;
 
       try {
         const res = await provider.generateJSON<{ questions: typeof generatedQuestions }>(userPrompt, systemPrompt);
@@ -119,30 +126,41 @@ Day ${dayNumber}: ${dayPlan.title}`;
     if (generatedQuestions.length === 0) {
       generatedQuestions = [
         {
-          questionText: `How many select lines (m) are required to build a 64:1 Multiplexer architecture?`,
-          options: ["4 select lines", "5 select lines", "6 select lines (since 2⁶ = 64)", "8 select lines"],
-          correctIndex: 2,
-          explanation: "Applying the rule 2^m = N with N = 64 gives 2^6 = 64, so exactly 6 select lines are required.",
-        },
-        {
-          questionText: `If an active-low Enable input (EN') of a 4:1 MUX is connected to Logic 1 (+5V), what is the output state?`,
+          questionText: `What is the primary governing principle of ${dayPlan.title}?`,
           options: [
-            "Y always follows data line I₀",
-            "Y is disabled and stays at logic 0 (or High-Z)",
-            "Y inverts all incoming data channels",
-            "The circuit enters an undefined meta-stable state",
+            `It describes the fundamental operational behavior and variable dependencies of ${dayPlan.concept.name}.`,
+            `It applies solely to static non-operational boundary conditions.`,
+            `It inverts the standard governing equations without physical justification.`,
+            `It operates independently of any input or state parameters.`
           ],
-          correctIndex: 1,
-          explanation: "Because the enable line is active-low (EN'), applying logic 1 disables the internal AND gates, forcing Y to 0.",
+          correctIndex: 0,
+          explanation: `In ${dayPlan.concept.name}, the fundamental operational framework governs how parameters interact under dynamic conditions.`,
         },
         {
-          questionText: `To implement an arbitrary 3-variable logic function F(A,B,C) using a 4:1 MUX with A,B as select lines, what is connected to channel I₀ when minterm m(0)=0 and m(1)=1?`,
-          options: ["I₀ = C", "I₀ = C'", "I₀ = 0", "I₀ = 1"],
+          questionText: `When analyzing ${dayPlan.title}, which condition must be carefully verified?`,
+          options: [
+            `Verify parameter boundaries and ensure governing assumptions hold true.`,
+            `Ignore all initial state conditions.`,
+            `Assume zero variation across all operating ranges.`,
+            `Bypass all mathematical proof requirements.`
+          ],
           correctIndex: 0,
-          explanation: "For AB = 00 (channel I₀), minterm 0 is 0 and minterm 1 is 1. When C=0, F=0; when C=1, F=1. Therefore I₀ = C.",
+          explanation: `Systematic analysis requires verifying that operational boundary conditions and underlying assumptions are satisfied.`,
+        },
+        {
+          questionText: `What is the primary objective of studying ${dayPlan.concept.name}?`,
+          options: [
+            `To understand analytical models, perform quantitative derivations, and solve practical domain problems.`,
+            `To memorize arbitrary nomenclature without conceptual understanding.`,
+            `To disable analytical verification methods.`,
+            `To replace mathematical modeling with random approximations.`
+          ],
+          correctIndex: 0,
+          explanation: `Mastery requires understanding the analytical principles and applying them accurately to domain problem-solving.`,
         },
       ];
     }
+
 
     // Save Quiz in database
     const quiz = await prisma.quiz.create({

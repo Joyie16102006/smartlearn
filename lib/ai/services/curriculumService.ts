@@ -188,64 +188,105 @@ function buildConceptsFromUnits(
 }
 
 /**
- * Title-based semantic topic synthesis (only if NO document was uploaded)
+ * Domain-Adaptive Title Fallback
+ * Detects the domain from a course title and returns appropriate concept modules.
+ * Covers Electronics, CS, Math, Physics, Mechanical, Biology, and generic STEM.
  */
-function synthesizeFromTitle(
+function synthesizeDomainAdaptiveConcepts(
   title: string,
+  level: string,
   safeMinutes: number
 ): GeneratedConcept[] {
-  const cleanTitle = title.trim() || "Subject";
-  const slug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 25);
+  const t = title.toLowerCase();
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20);
 
-  const modules = [
-    {
-      name: `${cleanTitle} — Foundations & Core Principles`,
-      desc: `Fundamental laws, terminology, and foundational building blocks of ${cleanTitle}.`,
-      diff: "Beginner" as const,
-    },
-    {
-      name: `${cleanTitle} — Core Devices & Mechanics`,
-      desc: `Primary components, operating characteristics, and underlying physical mechanisms.`,
-      diff: "Beginner" as const,
-    },
-    {
-      name: `${cleanTitle} — Systematic Analysis & Modeling`,
-      desc: `Mathematical modeling, equivalent circuits, and analytical methods in ${cleanTitle}.`,
-      diff: "Intermediate" as const,
-    },
-    {
-      name: `${cleanTitle} — Circuit Configurations & Applications`,
-      desc: `Practical configurations, active circuits, and standard application frameworks.`,
-      diff: "Intermediate" as const,
-    },
-    {
-      name: `${cleanTitle} — Frequency Response & Feedback`,
-      desc: `Dynamic behavior, stability criteria, frequency response, and feedback loops.`,
-      diff: "Intermediate" as const,
-    },
-    {
-      name: `${cleanTitle} — Advanced Design & Optimization`,
-      desc: `Advanced synthesis, noise considerations, power optimization, and real-world system design.`,
-      diff: "Advanced" as const,
-    },
-  ];
+  let modules: Array<{ name: string; desc: string; diff: "Beginner" | "Intermediate" | "Advanced" }>;
 
-  const concepts: GeneratedConcept[] = modules.map((m, idx) => ({
-    id: `c-${idx + 1}-${slug}-${idx + 1}`,
+  if (/electronic|circuit|semiconductor|diode|transistor|amplif|bjt|mosfet|signal|dc|ac|analog|digital|logic|vhdl|verilog|power|electr/i.test(t)) {
+    modules = [
+      { name: `${title} — Semiconductor Fundamentals`, desc: `Atomic structure, energy bands, carrier transport equations.`, diff: "Beginner" },
+      { name: `${title} — p-n Junction & Diodes`, desc: `Junction physics, diode V-I characteristics, load-line analysis.`, diff: "Beginner" },
+      { name: `${title} — Bipolar Junction Transistors`, desc: `BJT operating regions, DC biasing, h-parameter equivalent circuits.`, diff: "Intermediate" },
+      { name: `${title} — Field-Effect Transistors`, desc: `MOSFET/JFET operation, pinch-off, small-signal models.`, diff: "Intermediate" },
+      { name: `${title} — Amplifier Circuits & Feedback`, desc: `Common-emitter/source configurations, feedback topologies, gain analysis.`, diff: "Intermediate" },
+      { name: `${title} — Frequency Response & Stability`, desc: `Bode plots, bandwidth, gain-bandwidth product, stability criteria.`, diff: "Advanced" },
+    ];
+  } else if (/algorithm|data structure|python|java|c\+\+|software|program|compil|database|operating system|network|machine learn|artificial intel|computer science|web dev|react|node/i.test(t)) {
+    modules = [
+      { name: `${title} — Fundamentals & Complexity`, desc: `Core language constructs, time/space complexity (Big-O), and problem framing.`, diff: "Beginner" },
+      { name: `${title} — Linear Data Structures`, desc: `Arrays, linked lists, stacks, queues — implementation and traversal algorithms.`, diff: "Beginner" },
+      { name: `${title} — Non-Linear Data Structures`, desc: `Trees, graphs (BFS/DFS), heaps, and balanced BSTs.`, diff: "Intermediate" },
+      { name: `${title} — Sorting & Searching Algorithms`, desc: `Merge sort, quick sort, binary search — correctness proofs and performance.`, diff: "Intermediate" },
+      { name: `${title} — Dynamic Programming & Greedy`, desc: `Optimal substructure, memoization, DP recurrences, greedy proofs.`, diff: "Advanced" },
+      { name: `${title} — System Design & Applications`, desc: `Architecture patterns, scalability, real-world problem solving.`, diff: "Advanced" },
+    ];
+  } else if (/math|calculus|algebra|statistics|probability|differenti|integral|fourier|laplace|number theory|discrete math|topology/i.test(t)) {
+    modules = [
+      { name: `${title} — Definitions & Axioms`, desc: `Core definitions, notation, fundamental theorems, and proof strategies.`, diff: "Beginner" },
+      { name: `${title} — Core Operations & Properties`, desc: `Key operations, identities, and fundamental computational techniques.`, diff: "Beginner" },
+      { name: `${title} — Theorems & Formal Proofs`, desc: `Major theorems, corollaries, rigorous proof construction.`, diff: "Intermediate" },
+      { name: `${title} — Applied Problem Solving`, desc: `Worked problems, standard exam-style derivations, and worked examples.`, diff: "Intermediate" },
+      { name: `${title} — Advanced Topics & Extensions`, desc: `Generalizations, convergence analysis, advanced applications.`, diff: "Advanced" },
+      { name: `${title} — Integration & Cross-Domain Applications`, desc: `Connections to physics, engineering, and data science.`, diff: "Advanced" },
+    ];
+  } else if (/physics|mechanic|thermodynam|optic|quantum|electromag|relativity|wave|nuclear|fluid/i.test(t)) {
+    modules = [
+      { name: `${title} — Physical Laws & Governing Equations`, desc: `Fundamental laws, SI units, physical constants, and dimensional analysis.`, diff: "Beginner" },
+      { name: `${title} — Kinematics & Dynamics`, desc: `Motion equations, Newton's laws, energy-work theorems.`, diff: "Beginner" },
+      { name: `${title} — Conservation Laws`, desc: `Conservation of energy, momentum, angular momentum — derivations and applications.`, diff: "Intermediate" },
+      { name: `${title} — Wave & Field Theory`, desc: `Wave equations, field concepts, superposition, interference.`, diff: "Intermediate" },
+      { name: `${title} — Thermodynamic Systems`, desc: `State functions, laws of thermodynamics, entropy, and heat engines.`, diff: "Intermediate" },
+      { name: `${title} — Advanced Quantum & Modern Physics`, desc: `Schrodinger equation, wave-particle duality, quantum numbers, nuclear models.`, diff: "Advanced" },
+    ];
+  } else if (/mechanical|civil|structural|manufacturing|material|stress|strain|heat transfer|control system/i.test(t)) {
+    modules = [
+      { name: `${title} — Engineering Mechanics`, desc: `Static equilibrium, free body diagrams, force analysis.`, diff: "Beginner" },
+      { name: `${title} — Material Properties & Behavior`, desc: `Stress-strain curves, elastic modulus, material failure criteria.`, diff: "Beginner" },
+      { name: `${title} — Structural Analysis`, desc: `Beam bending, shear force diagrams, bending moment diagrams.`, diff: "Intermediate" },
+      { name: `${title} — Fluid Mechanics`, desc: `Continuity equation, Bernoulli theorem, pipe flow, Reynolds number.`, diff: "Intermediate" },
+      { name: `${title} — Heat Transfer & Thermodynamics`, desc: `Conduction, convection, radiation, heat exchanger design.`, diff: "Intermediate" },
+      { name: `${title} — Advanced Design & Optimization`, desc: `FEM concepts, fatigue analysis, system optimization.`, diff: "Advanced" },
+    ];
+  } else if (/biology|biochem|genetics|micro|cell|anatomy|physiology|ecology|molecular|neuroscience/i.test(t)) {
+    modules = [
+      { name: `${title} — Cell Biology & Biochemical Foundations`, desc: `Cell structure, biomolecules, metabolic pathways.`, diff: "Beginner" },
+      { name: `${title} — Genetics & DNA`, desc: `DNA replication, transcription, translation, Mendelian genetics.`, diff: "Beginner" },
+      { name: `${title} — Physiology & Systems`, desc: `Organ systems, homeostasis, regulatory mechanisms.`, diff: "Intermediate" },
+      { name: `${title} — Microbiology & Immunology`, desc: `Microbial classification, immune response, pathogens.`, diff: "Intermediate" },
+      { name: `${title} — Ecology & Evolution`, desc: `Population dynamics, natural selection, ecosystems.`, diff: "Intermediate" },
+      { name: `${title} — Advanced Molecular & Biotechnology`, desc: `PCR, CRISPR, recombinant DNA, bioinformatics.`, diff: "Advanced" },
+    ];
+  } else {
+    modules = [
+      { name: `${title} — Foundations & Core Definitions`, desc: `Fundamental terminology, governing laws, and primary analytical frameworks.`, diff: "Beginner" },
+      { name: `${title} — Core Principles & Methods`, desc: `Primary techniques, standard approaches, and essential problem-solving methods.`, diff: "Beginner" },
+      { name: `${title} — Systematic Analysis & Modeling`, desc: `Mathematical or logical models, derivations, and analytical methods.`, diff: "Intermediate" },
+      { name: `${title} — Practical Applications & Case Studies`, desc: `Real-world application, standard configurations, and worked examples.`, diff: "Intermediate" },
+      { name: `${title} — Advanced Topics & Optimization`, desc: `Edge cases, performance considerations, and advanced synthesis.`, diff: "Advanced" },
+      { name: `${title} — Integration & Capstone`, desc: `Cross-concept integration, capstone problem solving, and review.`, diff: "Advanced" },
+    ];
+  }
+
+  // Adjust difficulty labels based on the student's declared level
+  const difficultyLadder: Array<"Beginner" | "Intermediate" | "Advanced"> = ["Beginner", "Intermediate", "Advanced"];
+  const levelBoost: Record<string, number> = { Beginner: 0, Intermediate: 1, Advanced: 2 };
+  const boost = levelBoost[level] ?? 0;
+
+  return modules.map((m, idx) => ({
+    id: `c-${idx + 1}-${slug}`,
     name: m.name,
     slug: `${slug}-m${idx + 1}`,
-    importance: "high",
-    difficulty: m.diff,
+    importance: "high" as const,
+    difficulty: difficultyLadder[Math.min(difficultyLadder.indexOf(m.diff) + boost, 2)],
     estimatedMinutes: safeMinutes,
     description: m.desc,
-    prerequisites: idx > 0 ? [`c-${idx}-${slug}-${idx}`] : [],
+    prerequisites: idx > 0 ? [`c-${idx}-${slug}`] : [],
     dependents: [],
     keyFormulas: [],
     dayAssigned: 1,
   }));
-
-  return concepts;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Curriculum Service
@@ -279,16 +320,20 @@ export class CurriculumService {
         : params.sourceContext?.slice(0, 6000) || "";
 
       const systemPrompt = `You are SmartLearn AI Course Architect.
-Analyze the provided course title and syllabus material.
-Generate a structured knowledge graph (DAG) of 6 to 12 concept nodes matching the exact subject.
+Analyze the provided course title, student knowledge level, and syllabus material.
+Generate a structured knowledge graph (DAG) of 6 to 12 concept nodes matching the EXACT subject.
 
-CRITICAL RULES:
-1. Concept names MUST come directly from the syllabus / subject material provided.
-2. NEVER use generic placeholder names like "Core Axioms", "Number Systems" (unless it is Digital Logic), "Architectural Synthesis", or "Systematic Analysis".
-3. Formulate prerequisites based on logical learning order (e.g. Diodes -> Transistors -> Amplifiers).
-4. Extract real equations from the material for keyFormulas.
+HALLUCINATION GUARD — MANDATORY:
+1. Concept names MUST come ONLY from the syllabus / subject material provided. Do NOT invent topic names.
+2. NEVER use generic placeholder names like "Core Axioms", "Architectural Synthesis", or "Systematic Analysis".
+3. Do NOT include topics, formulas, or concepts that are NOT in the provided source material.
+4. If the source is limited, generate fewer (4-6) accurate concepts instead of inventing additional ones.
+5. Formulate prerequisites based on logical learning order (e.g. Diodes -> Transistors -> Amplifiers).
+6. Extract ONLY real equations and formulas directly stated in the material for keyFormulas.
+7. Provide 4 to 8 granular distinct subtopics per concept — each should map to one focused day of study.
+8. Calibrate all concept descriptions and difficulty to the student's knowledge level: ${params.level || "Intermediate"}.
 
-Return ONLY a valid JSON object matching this schema:
+Return ONLY a valid JSON object (NO markdown wrapper, NO text outside the JSON) matching this schema:
 {
   "description": "2-3 sentence overview of what the student will master in this course",
   "category": "Academic Subject Category (e.g. Electronic Devices & Circuits, Computer Science)",
@@ -300,48 +345,57 @@ Return ONLY a valid JSON object matching this schema:
       "importance": "high",
       "difficulty": "Beginner",
       "estimatedMinutes": ${safeMinutes},
-      "description": "Concise concept overview",
+      "description": "Concise concept overview grounded in the syllabus",
       "prerequisites": [],
-      "keyFormulas": ["Formula 1", "Formula 2"]
+      "keyFormulas": ["Exact Formula from Source 1", "Exact Formula from Source 2"],
+      "subtopics": ["Specific Topic A", "Specific Topic B", "Specific Topic C", "Specific Topic D"]
     }
   ]
 }`;
 
       const userPrompt = `Course: "${title}"
 Goal: "${params.goal}"
-Level: ${params.level}
+Student Knowledge Level: ${params.level || "Intermediate"}
 Schedule: ${safeTotalDays} days (${safeMinutes} mins/day)
 
-Syllabus / Units Material:
+Syllabus / Units Material (GROUND TRUTH — use ONLY what is here):
 ${unitsContext}
 
-Synthesize 6 to 10 distinct concept nodes with prerequisite dependencies matching the syllabus.`;
+Synthesize 6 to 10 distinct concept nodes with prerequisite dependencies and 4-8 specific daily subtopics per concept. Stay strictly grounded to the source material above.`;
 
       try {
         const result = await provider.generateJSON<{
           description?: string;
           category?: string;
-          concepts?: GeneratedConcept[];
+          concepts?: Array<GeneratedConcept & { subtopics?: string[] }>;
         }>(userPrompt, systemPrompt);
 
         if (result && Array.isArray(result.concepts) && result.concepts.length >= 3) {
-          const rawConcepts: GeneratedConcept[] = result.concepts.map((c, i) => ({
-            id: c.id || `c-${i + 1}-${c.slug || "concept"}`,
-            name: c.name,
-            slug: c.slug || c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-            importance: c.importance || "high",
-            difficulty: c.difficulty || (i === 0 ? "Beginner" : i < result.concepts!.length - 1 ? "Intermediate" : "Advanced"),
-            estimatedMinutes: c.estimatedMinutes || safeMinutes,
-            description: c.description || `Mastery of ${c.name}.`,
-            prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
-            dependents: [],
-            keyFormulas: Array.isArray(c.keyFormulas) ? c.keyFormulas : [],
-            dayAssigned: 1,
-          }));
+          const aiUnitTopicMap = new Map<string, string[]>();
+
+          const rawConcepts: GeneratedConcept[] = result.concepts.map((c, i) => {
+            const conceptId = c.id || `c-${i + 1}-${c.slug || "concept"}`;
+            if (Array.isArray(c.subtopics) && c.subtopics.length > 0) {
+              aiUnitTopicMap.set(conceptId, c.subtopics);
+            }
+            return {
+              id: conceptId,
+              name: c.name,
+              slug: c.slug || c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+              importance: c.importance || "high",
+              difficulty: c.difficulty || (i === 0 ? "Beginner" : i < result.concepts!.length - 1 ? "Intermediate" : "Advanced"),
+              estimatedMinutes: c.estimatedMinutes || safeMinutes,
+              description: c.description || `Mastery of ${c.name}.`,
+              prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
+              dependents: [],
+              keyFormulas: Array.isArray(c.keyFormulas) ? c.keyFormulas : [],
+              dayAssigned: 1,
+            };
+          });
 
           const withDays = assignDaysByDepth(rawConcepts, safeTotalDays);
           const withDependents = computeDependents(withDays);
-          const daysList = buildScheduleFromConcepts(withDependents, safeTotalDays, safeMinutes);
+          const daysList = buildScheduleFromConcepts(withDependents, safeTotalDays, safeMinutes, aiUnitTopicMap.size > 0 ? aiUnitTopicMap : undefined);
 
           return {
             description: result.description || `${safeTotalDays}-day curriculum for ${title}.`,
@@ -370,14 +424,14 @@ Synthesize 6 to 10 distinct concept nodes with prerequisite dependencies matchin
       };
     }
 
-    // 4. Semantic Title-Derived Fallback (for courses without document upload)
-    const titleConcepts = synthesizeFromTitle(title, safeMinutes);
+    // 4. Domain-Adaptive Title-Derived Fallback (for courses without document upload)
+    const titleConcepts = synthesizeDomainAdaptiveConcepts(title, params.level || "Intermediate", safeMinutes);
     const withDays = assignDaysByDepth(titleConcepts, safeTotalDays);
     const withDependents = computeDependents(withDays);
     const daysList = buildScheduleFromConcepts(withDependents, safeTotalDays, safeMinutes);
 
     return {
-      description: `Structured ${safeTotalDays}-day curriculum for ${title} covering foundational principles to advanced applications.`,
+      description: `Structured ${safeTotalDays}-day curriculum for ${title} covering foundational principles to advanced applications, calibrated for ${params.level || "Intermediate"} level.`,
       category: "Engineering & Applied Sciences",
       concepts: withDependents,
       daysList,

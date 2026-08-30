@@ -16,9 +16,8 @@ export default function ResourcesPage() {
     fetch("/api/courses")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setCourses(data);
-        }
+        const list = Array.isArray(data) ? data : (data?.courses || []);
+        setCourses(list);
       })
       .catch((err) => console.warn("Failed to load courses for resources:", err))
       .finally(() => setIsLoading(false));
