@@ -82,3 +82,11 @@ body {
   background: rgba(100, 116, 139, 0.6);
 }
 
+/* Hide Next.js dev tools floating badge overlay */
+nextjs-portal,
+#nextjs-dev-tools,
+[data-nextjs-dev-indicator],
+[data-nextjs-toast] {
+  display: none !important;
+}
+
