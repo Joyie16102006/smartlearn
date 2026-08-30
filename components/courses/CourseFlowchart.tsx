@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ConceptNode } from "@/types";
-import { CheckCircle2, Lock, Layers } from "lucide-react";
+import { CheckCircle2, Circle, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CourseFlowchartProps {
@@ -295,8 +295,8 @@ export const CourseFlowchart: React.FC<CourseFlowchartProps> = ({
                         ●
                       </div>
                     ) : (
-                      <div className="w-4 h-4 rounded-xs bg-zinc-200 text-zinc-500 flex items-center justify-center shrink-0">
-                        <Lock className="w-2.5 h-2.5" />
+                      <div className="w-4 h-4 rounded-xs bg-zinc-100 border border-zinc-200 text-zinc-400 flex items-center justify-center shrink-0">
+                        <Circle className="w-2.5 h-2.5 text-zinc-400" strokeWidth={2} />
                       </div>
                     )}
                     <span className="text-[10px] font-mono font-semibold">

@@ -3,12 +3,16 @@ import Link from "next/link";
 import { Course } from "@/types";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Calendar, ChevronRight, BookOpen, Flame } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CourseCardProps {
   course: Course;
 }
 
 export const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
+  const currentDayPlan = course.daysList?.find((d) => d.dayNumber === course.currentDay);
+  const isTodayDone = currentDayPlan?.status === "completed";
+
   return (
     <div className="bg-white rounded-md border border-zinc-200 hover:border-zinc-400 transition-colors flex flex-col justify-between p-5 space-y-3.5 group">
       <div>
@@ -22,10 +26,22 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
               {course.title}
             </h3>
           </div>
-          {/* Per-Course Streak */}
-          <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-mono">
-            <Flame className="w-3 h-3 text-zinc-600" />
-            <span>{course.streakDays || 7}d</span>
+          {/* Per-Course Streak (Turns orange when today's work is completed) */}
+          <div
+            className={cn(
+              "shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border text-[11px] font-mono transition-colors",
+              isTodayDone
+                ? "border-orange-200 bg-orange-50/90 text-orange-950"
+                : "border-zinc-200 bg-zinc-50 text-zinc-700"
+            )}
+          >
+            <Flame
+              className={cn(
+                "w-3 h-3 transition-colors",
+                isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+              )}
+            />
+            <span>{course.streakDays || 1}d</span>
           </div>
         </div>
 

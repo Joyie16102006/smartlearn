@@ -267,8 +267,22 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1 px-2.5 py-1 border border-zinc-200 bg-zinc-50 text-xs font-mono text-zinc-800">
-            <Flame className="w-3.5 h-3.5 text-zinc-700" />
+          <div
+            className={cn(
+              "flex items-center gap-1 px-2.5 py-1 border text-xs font-mono transition-colors",
+              (day.status === "completed" || quizSubmitted)
+                ? "border-orange-200 bg-orange-50/90 text-orange-950 font-medium"
+                : "border-zinc-200 bg-zinc-50 text-zinc-800"
+            )}
+          >
+            <Flame
+              className={cn(
+                "w-3.5 h-3.5 transition-colors",
+                (day.status === "completed" || quizSubmitted)
+                  ? "text-orange-500 fill-orange-500"
+                  : "text-zinc-400"
+              )}
+            />
             <span>{streakDays}d streak</span>
           </div>
           <div className="flex items-center gap-1 px-2.5 py-1 border border-zinc-900 bg-zinc-900 text-xs font-mono text-white">

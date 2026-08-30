@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   CheckCircle2,
-  Lock,
+  Circle,
   AlertTriangle,
   Flame,
   ArrowRight,
@@ -36,7 +36,7 @@ export const RoadmapGraph: React.FC<RoadmapGraphProps> = ({
       case "weak":
         return <AlertTriangle className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />;
       case "upcoming":
-        return <Lock className="w-3.5 h-3.5 text-zinc-400" />;
+        return <Circle className="w-3.5 h-3.5 text-zinc-400" strokeWidth={1.75} />;
     }
   };
 

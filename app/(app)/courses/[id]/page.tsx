@@ -10,7 +10,7 @@ import {
   Calendar,
   ArrowLeft,
   CheckCircle2,
-  Lock,
+  Circle,
   Flame,
   Brain,
   Play,
@@ -247,11 +247,12 @@ export default function CourseOverviewPage() {
                         />
                       </div>
                     ) : (
-                      <Lock
+                      <Circle
                         className={cn(
                           "w-3.5 h-3.5",
-                          isSelected ? "text-zinc-300" : "text-zinc-400"
+                          isSelected ? "text-zinc-300" : "text-zinc-300"
                         )}
+                        strokeWidth={1.75}
                       />
                     )}
                   </div>

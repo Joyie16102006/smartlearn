@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Course } from "@/types";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Flame, ArrowRight, Plus, Trash2, Loader2, BookOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -73,20 +74,35 @@ export default function DashboardPage() {
       {/* ── COURSE-WISE STREAK BADGES ROW (Only if courses exist) ── */}
       {courses.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          {courses.map((course) => (
-            <div
-              key={course.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-zinc-200 bg-zinc-50 text-xs text-zinc-700 font-mono"
-            >
-              <Flame className="w-3 h-3 text-zinc-600" />
-              <span className="font-semibold text-zinc-900 truncate max-w-[140px]">
-                {course.title}:
-              </span>
-              <span className="text-zinc-600">
-                {course.streakDays || 0}d streak
-              </span>
-            </div>
-          ))}
+          {courses.map((course) => {
+            const isTodayDone = Boolean(
+              course.daysList?.find((d) => d.dayNumber === course.currentDay)?.status === "completed"
+            );
+            return (
+              <div
+                key={course.id}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-xs font-mono transition-colors",
+                  isTodayDone
+                    ? "border-orange-200 bg-orange-50/90 text-orange-950"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-700"
+                )}
+              >
+                <Flame
+                  className={cn(
+                    "w-3 h-3 transition-colors",
+                    isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+                  )}
+                />
+                <span className="font-semibold text-zinc-900 truncate max-w-[140px]">
+                  {course.title}:
+                </span>
+                <span className={isTodayDone ? "text-orange-800 font-medium" : "text-zinc-600"}>
+                  {course.streakDays || 1}d streak
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -119,33 +135,49 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
-          {courses.map((course) => (
-            <div
-              key={course.id}
-              className="relative bg-white rounded-md border border-zinc-200 p-5 flex flex-col justify-between hover:border-zinc-400 transition-colors group min-h-[220px]"
-            >
-              {/* Top-Left Corner Fold Tag */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-zinc-900" />
+          {courses.map((course) => {
+            const isTodayDone = Boolean(
+              course.daysList?.find((d) => d.dayNumber === course.currentDay)?.status === "completed"
+            );
+            return (
+              <div
+                key={course.id}
+                className="relative bg-white rounded-md border border-zinc-200 p-5 flex flex-col justify-between hover:border-zinc-400 transition-colors group min-h-[220px]"
+              >
+                {/* Top-Left Corner Fold Tag */}
+                <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-zinc-900" />
 
-              <div className="space-y-3">
-                {/* Header Row: Category & Streak */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block">
-                      {course.category?.split("&")[0]?.trim() || "Technical Track"}
-                    </span>
-                    {/* Course Name */}
-                    <h3 className="text-sm font-semibold text-zinc-900 group-hover:text-black transition-colors mt-0.5 leading-snug">
-                      {course.title}
-                    </h3>
-                  </div>
+                <div className="space-y-3">
+                  {/* Header Row: Category & Streak */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block">
+                        {course.category?.split("&")[0]?.trim() || "Technical Track"}
+                      </span>
+                      {/* Course Name */}
+                      <h3 className="text-sm font-semibold text-zinc-900 group-hover:text-black transition-colors mt-0.5 leading-snug">
+                        {course.title}
+                      </h3>
+                    </div>
 
-                  {/* Course Streak Badge */}
-                  <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border border-zinc-200 bg-zinc-50 text-[11px] font-mono text-zinc-700">
-                    <Flame className="w-3 h-3 text-zinc-600" />
-                    <span>{course.streakDays || 0}d</span>
+                    {/* Course Streak Badge (Orange if today completed, normal if not yet) */}
+                    <div
+                      className={cn(
+                        "shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border text-[11px] font-mono transition-colors",
+                        isTodayDone
+                          ? "border-orange-200 bg-orange-50/90 text-orange-950"
+                          : "border-zinc-200 bg-zinc-50 text-zinc-700"
+                      )}
+                    >
+                      <Flame
+                        className={cn(
+                          "w-3 h-3 transition-colors",
+                          isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+                        )}
+                      />
+                      <span>{course.streakDays || 1}d</span>
+                    </div>
                   </div>
-                </div>
 
                 {/* Course Goal */}
                 <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
@@ -198,7 +230,8 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-          ))}
+          );
+        })}
 
           {/* ── BIG [+] ADD COURSE CARD ── */}
           <Link
