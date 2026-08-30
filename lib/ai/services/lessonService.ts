@@ -2,6 +2,93 @@ import { getAIProvider } from "../provider";
 import { prisma } from "@/lib/db";
 
 /**
+ * Builds a guaranteed "References & Further Reading" section
+ * from the concept/topic name — completely programmatic,
+ * so links are ALWAYS present regardless of AI output.
+ */
+function buildReferencesSection(params: {
+  conceptName: string;
+  courseTitle: string;
+  topics: string[];
+}): string {
+  const { conceptName, courseTitle, topics } = params;
+
+  // Use the first specific topic if available, else the concept name
+  const primaryTopic = topics[0] || conceptName;
+  const wikiSlug = (t: string) => encodeURIComponent(t.replace(/\s+/g, "_"));
+  const ytSlug = (t: string) => encodeURIComponent(t + " explained tutorial");
+  const gfgSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  // Build topic-specific Wikipedia entries
+  const wikiLinks = [
+    `- [${conceptName} — Wikipedia](https://en.wikipedia.org/wiki/${wikiSlug(conceptName)}) — Comprehensive overview and background`,
+  ];
+
+  // Add extra Wikipedia entry for the specific topic if different from concept
+  if (primaryTopic !== conceptName) {
+    wikiLinks.push(
+      `- [${primaryTopic} — Wikipedia](https://en.wikipedia.org/wiki/${wikiSlug(primaryTopic)}) — Specific topic deep-dive`
+    );
+  }
+
+  // Detect subject area for targeted links
+  const isCS = /algorithm|data structure|programming|computer|software|coding|javascript|python|react|web/i.test(courseTitle + conceptName);
+  const isMath = /calculus|linear algebra|statistics|probability|differential|integral|matrix|fourier/i.test(courseTitle + conceptName);
+  const isElectronics = /electronic|circuit|semiconductor|transistor|amplifier|diode|signal|digital/i.test(courseTitle + conceptName);
+  const isPhysics = /physics|quantum|electromagnetic|optics|thermodynamics|mechanics|wave/i.test(courseTitle + conceptName);
+
+  const practiceLinks: string[] = [];
+
+  if (isCS) {
+    practiceLinks.push(
+      `- [${primaryTopic} — GeeksForGeeks](https://www.geeksforgeeks.org/${gfgSlug(primaryTopic)}/) — Examples, code, and explanations`,
+      `- [${conceptName} — GeeksForGeeks](https://www.geeksforgeeks.org/${gfgSlug(conceptName)}/) — Practice problems and tutorials`
+    );
+  } else if (isMath) {
+    practiceLinks.push(
+      `- [${conceptName} — Khan Academy](https://www.khanacademy.org/search?page_search_query=${encodeURIComponent(conceptName)}) — Step-by-step video lessons`,
+      `- [MIT OpenCourseWare — Mathematics](https://ocw.mit.edu/search/?q=${encodeURIComponent(conceptName)}) — University-level lecture notes and problem sets`
+    );
+  } else if (isElectronics) {
+    practiceLinks.push(
+      `- [${conceptName} — All About Circuits](https://www.allaboutcircuits.com/search/?q=${encodeURIComponent(conceptName)}) — Circuit theory and practical electronics`,
+      `- [${primaryTopic} — Electronics Tutorials](https://www.electronics-tutorials.ws) — Clear diagrams and worked examples`
+    );
+  } else if (isPhysics) {
+    practiceLinks.push(
+      `- [${conceptName} — HyperPhysics](http://hyperphysics.phy-astr.gsu.edu/hbase/hframe.html) — Concept maps and physics derivations`,
+      `- [MIT OpenCourseWare — Physics](https://ocw.mit.edu/search/?q=${encodeURIComponent(conceptName)}) — Lecture notes and problem sets`
+    );
+  } else {
+    practiceLinks.push(
+      `- [${conceptName} — Khan Academy](https://www.khanacademy.org/search?page_search_query=${encodeURIComponent(conceptName)}) — Foundation-level explanations`,
+      `- [${primaryTopic} — Britannica](https://www.britannica.com/search?query=${encodeURIComponent(primaryTopic)}) — Encyclopedia reference`
+    );
+  }
+
+  const videoLinks = [
+    `- [▶ ${primaryTopic} — YouTube](https://www.youtube.com/results?search_query=${ytSlug(primaryTopic)}) — Video lecture and visual explanations`,
+    `- [▶ ${conceptName} full tutorial — YouTube](https://www.youtube.com/results?search_query=${ytSlug(conceptName + " full course")}) — In-depth course playlist`,
+  ];
+
+  return `
+
+---
+
+## 📚 References & Further Reading
+
+### 🌐 Wikipedia
+${wikiLinks.join("\n")}
+
+### 📖 Study Resources
+${practiceLinks.join("\n")}
+
+### 🎬 Video Explanations
+${videoLinks.join("\n")}
+`;
+}
+
+/**
  * Model 3: Daily Lesson Generator Service
  *
  * Responsibilities:
@@ -269,8 +356,16 @@ ${studentLevel === "Advanced" ? "- Deep rigor, proofs, edge cases, research conn
         .replace(/^```(?:json|markdown)?\s*/i, "")
         .replace(/\s*```\s*$/, "")
         .trim();
+
+      // Remove any AI-generated references/further reading section
+      // so we can replace it with our guaranteed programmatic one
+      generatedMarkdown = generatedMarkdown
+        .replace(/\n---\n+##\s*[📚🔗]?\s*(References|Further Reading|Sources|Bibliography)[\s\S]*$/i, "")
+        .replace(/\n##\s*[📚🔗]?\s*(References|Further Reading|Sources|Bibliography)[\s\S]*$/i, "")
+        .trimEnd();
     }
 
+    // ── FALLBACK CONTENT if AI returned nothing ──
     if (!generatedMarkdown.trim()) {
       generatedMarkdown = `## 🎯 Learning Objectives
 
@@ -294,17 +389,16 @@ ${topics.map((t) => `### ${t}\n\nCore theory, governing equations, and practical
 
 ## 7. Summary & Key Takeaways
 
-> **Key Point:** Mastery of **${dayPlan.concept.name}** requires firm understanding of both underlying theoretical principles and practical problem-solving.
-
----
-
-## 📚 References & Further Reading
-
-- [Wikipedia — ${dayPlan.concept.name}](https://en.wikipedia.org/wiki/${encodeURIComponent(dayPlan.concept.name)}) — Overview and background
-- [Khan Academy](https://www.khanacademy.org) — Foundation-level video explanations
-- [YouTube Search](https://www.youtube.com/results?search_query=${encodeURIComponent(dayPlan.concept.name + " explained")}) — Video tutorials
-`;
+> **Key Point:** Mastery of **${dayPlan.concept.name}** requires firm understanding of both underlying theoretical principles and practical problem-solving.`;
     }
+
+    // ── ALWAYS APPEND PROGRAMMATIC REFERENCES SECTION ──
+    // Built from topic/concept name — guaranteed to always be present
+    generatedMarkdown += buildReferencesSection({
+      conceptName: dayPlan.concept.name,
+      courseTitle: dayPlan.course.title,
+      topics,
+    });
 
     const nextVersionNumber = lesson.versions.length + 1;
 
