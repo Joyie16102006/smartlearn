@@ -6,8 +6,9 @@ import { prisma } from "@/lib/db";
  *
  * Responsibilities:
  * - Generate comprehensive educational workspace lesson markdown
- * - Include LaTeX math ($$ and $), code blocks, GFM tables, and source references
+ * - Include LaTeX math ($$ and $), GFM tables, and source references
  * - Ensure every generation creates an immutable LessonVersion record in the database
+ * - Content is cached — NOT regenerated on revisit (only on explicit "Regenerate" click)
  */
 
 export interface LessonGenerationResult {
@@ -86,7 +87,7 @@ export class LessonService {
       }
     }
 
-    // If existing versions exist and forceRegenerate is false, return latest
+    // ── CACHE HIT: Return existing latest version (no re-generation on revisit) ──
     if (lesson.versions.length > 0 && !forceRegenerate) {
       const latest = lesson.versions[0];
       return {
@@ -131,7 +132,7 @@ export class LessonService {
           const scoreTag = d.quizScore !== null
             ? d.quizScore >= 70
               ? `${d.quizScore}% ✓ Mastered`
-              : `${d.quizScore}% ✗ Below mastery`
+              : `${d.quizScore}% ✗ Needs review`
             : "Not attempted";
           const mistakeTag = d.hasMistake && d.mistakeConcept ? ` | Struggled: ${d.mistakeConcept}` : "";
           const revisionTag = d.revisionNote ? ` | Note: ${d.revisionNote}` : "";
@@ -147,53 +148,84 @@ export class LessonService {
       // Build level-adaptive pedagogical directives
       const levelDirectives = {
         Beginner: `STUDENT LEVEL: BEGINNER
-- Define every technical term clearly the first time it is used.
-- Use simple analogies and real-world comparisons before introducing mathematical formalism.
-- Show all steps in derivations with full algebraic substitutions — never skip steps.
-- Worked examples must include unit tracking and complete arithmetic.
-- Avoid advanced jargon; if used, immediately explain it in plain language.`,
+━ Define every technical term clearly in plain language the first time it appears.
+━ Start with a real-world analogy or everyday scenario BEFORE any mathematics.
+━ Show ALL steps in derivations — never skip steps. Include unit tracking.
+━ Worked examples must spell out every arithmetic step.
+━ Use simple vocabulary; immediately explain any jargon in brackets.
+━ After each concept, add a short "In simple words:" summary paragraph.`,
+
         Intermediate: `STUDENT LEVEL: INTERMEDIATE
-- Assume the student knows basic terminology but needs help connecting theory to application.
-- Provide rigorous derivations and show key intermediate algebraic steps.
-- Include at least one fully solved numerical example with realistic values.
-- Point out common mistakes and boundary condition traps.`,
+━ Assume basic terminology is known. Focus on connecting theory to application.
+━ Provide rigorous derivations showing key intermediate algebraic steps.
+━ Include at least one fully solved numerical example with realistic parameter values.
+━ Point out common mistakes, boundary conditions, and misconceptions to avoid.
+━ Brief conceptual recaps are fine, but spend most space on analysis and worked problems.`,
+
         Advanced: `STUDENT LEVEL: ADVANCED
-- Assume strong domain fundamentals. Focus on derivations, proofs, and edge cases.
-- Present formal mathematical rigor with theorem-proof structure where appropriate.
-- Compare multiple analytical approaches and discuss their trade-offs.
-- Include advanced worked examples with non-trivial parameter choices.
-- Connect to research literature, industrial standards, or open problems where relevant.`,
+━ Assume strong domain fundamentals. Focus on proofs, derivations, and edge cases.
+━ Present formal mathematical rigor; theorem-proof structure where appropriate.
+━ Compare multiple analytical approaches and discuss trade-offs.
+━ Include advanced worked examples with non-trivial or industry-realistic parameter choices.
+━ Connect to research directions, industrial standards, or open problems where relevant.
+━ Skip elementary definitions — go straight to depth.`,
       };
 
       const levelGuide = levelDirectives[studentLevel as keyof typeof levelDirectives] || levelDirectives.Intermediate;
 
-      const isProgrammingOrCS = /computer science|programming|software|data structures|algorithms|python|java|c\+\+|javascript|react|web dev|backend|frontend/i.test(
+      const isProgrammingOrCS = /computer science|programming|software|data structures|algorithms|python|java|c\+\+|javascript|react|web dev|backend|frontend|coding|dsa/i.test(
         `${dayPlan.course.title} ${dayPlan.course.category || ""}`
       );
 
-      const systemPrompt = `You are SmartLearn AI — a world-class university professor and master tutor across science, engineering, mathematics, and computing.
-Your task is to generate a comprehensive, highly rigorous, and crystal-clear daily lecture document in clean GitHub-Flavored Markdown.
+      const systemPrompt = `You are SmartLearn AI — a world-class university professor and master educator across science, engineering, mathematics, and computing. Your lectures are celebrated for their clarity, depth, and beautiful structure.
+
+Generate a comprehensive, deeply educational daily lecture in pure GitHub-Flavored Markdown (GFM). The output will be rendered by a React Markdown renderer with KaTeX support.
 
 ${levelGuide}
 
-STRICT CODE BLOCK RULE (MANDATORY):
-${isProgrammingOrCS ? "- Provide clean, runnable code examples with language tags (e.g. ```python, ```cpp) and time/space complexity analysis." : "- NEVER include code blocks or programming snippets (NO Python, C++, Verilog, Java, etc.)! This course is a theoretical/applied science or engineering domain. Focus purely on mathematical proofs, governing equations, block diagrams, physical mechanisms, and worked analytical calculations."}
+━━━ STRICT FORMATTING RULES (NON-NEGOTIABLE) ━━━
 
-FORMULA & KEYWORD HIGHLIGHTING (CHATGPT STYLE):
-1. Use display math ($$ ... $$) on separate lines for ALL primary equations, governing laws, and derivations so they render into clean formula cards.
-2. Wrap every single variable, parameter, physical constant, mathematical symbol, and key technical term in \`inline code backticks\` (or inline LaTeX $...$) so they are cleanly highlighted in pill boxes (e.g. \`SNR\`, \`f_c\`, \`\\beta\`, \`Carrier Frequency\`, \`Modulation Index\`).
-3. Wrap essential design rules, key takeaways, and critical insights inside > blockquotes so they format into prominent callout boxes.
+1. MATHEMATICS — Use ONLY LaTeX delimiters:
+   • Display equations (formula cards): Write them as $$ equation $$ on their OWN separate lines with blank lines before and after. Do NOT wrap them in HTML.
+   • Inline math: $x = 2$ or \`symbol\` backtick pills for short variable names like \`V_BE\`, \`R_C\`, \`f_c\`.
+   • NEVER use <div>, <span>, <style>, or any HTML tags. Pure Markdown + LaTeX only.
 
-ANTI-HALLUCINATION GUARD — MANDATORY:
-- Only teach concepts, equations, and examples that are genuinely part of the day's stated syllabus.
-- Do NOT invent equations, standards, or research references that you are uncertain about.
-- If a numerical worked example uses real physical constants (e.g., c = 3×10⁸ m/s, q = 1.6×10⁻¹⁹ C), clearly state their source and units.
+2. KEYWORDS & PARAMETERS — Wrap important terms, variable names, physical constants, and key jargon in backtick inline code: \`term\`. Example: \`SNR\`, \`Modulation Index\`, \`Carrier Frequency\`, \`β\`.
 
-FORMATTING RULES:
-- Use ## for major section headers, ### for sub-sections.
-- Display equations: $$ equation $$ on separate lines.
-- Always include at least one complete worked numerical problem with step-by-step substitution and final unit analysis.
-- Output pure Markdown only — NO JSON wrappers, NO preambles like "Sure, here is..."`;
+3. CALLOUT BOXES — Use > blockquote syntax for:
+   • Key rules and design constraints
+   • Important warnings or common mistakes  
+   • Core insights and takeaways
+   Example: > **Rule:** The collector current is controlled by base current via \`β\`.
+
+4. SPACING — Leave generous blank lines between sections. Each major section should feel like a dedicated chapter. Use --- horizontal rules to separate major topics.
+
+5. SOURCE LINKS — At the END of the document, always include a "## 📚 References & Further Reading" section with:
+   • At least 2–3 real Wikipedia links (https://en.wikipedia.org/wiki/...)
+   • At least 1–2 real links to GeeksForGeeks, Khan Academy, MIT OpenCourseWare, or similar
+   • 1 YouTube search link for a video tutorial: https://www.youtube.com/results?search_query=...
+   Format links as: - [Page Title](https://url) — Brief description
+
+6. STRUCTURE — Follow this exact section order:
+   ## 🎯 Learning Objectives
+   ## 1. Introduction & Intuition
+   ## 2. Core Theory & Governing Equations  
+   ## 3. Detailed Worked Example(s)
+   ## 4. Comparison Table / Key Parameters
+   ## 5. Real-World Applications
+   ## 6. Common Mistakes & Traps
+   ## 7. Summary & Key Takeaways
+   ## 📚 References & Further Reading
+
+${isProgrammingOrCS
+  ? "7. CODE — Provide clean, runnable code examples with language-tagged fenced blocks (```python, ```cpp). Include time/space complexity notes."
+  : "7. NO CODE — This is a theoretical/applied science or engineering course. NEVER include programming code blocks (Python, C++, Java, Verilog, etc.). Use mathematical derivations, equations, circuit descriptions, block diagrams in text, and analytical worked problems instead."}
+
+ANTI-HALLUCINATION GUARD:
+• Only teach concepts genuinely part of today's topics.
+• Do not invent equations, standards, or paper references you are uncertain about.
+• If using physical constants (c = 3×10⁸ m/s, q = 1.6×10⁻¹⁹ C), always state their value and units explicitly.
+• Output ONLY pure Markdown — no JSON wrappers, no preamble like "Sure, here is..."`;
 
       const performanceContext = performanceDigest
         ? `\n${performanceDigest}\nUse this student history to decide whether to briefly recap prerequisites before the new material, and to adjust the depth of examples accordingly.\n`
@@ -209,14 +241,13 @@ Today's Specific Topics:
 ${topics.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 ${dayPlan.concept.keyFormulas ? `Key Equations from Syllabus: ${dayPlan.concept.keyFormulas}` : ""}
 ${dayPlan.revisionNote ? `\nPrior Diagnostic Concept to Revisit: ${dayPlan.revisionNote}` : ""}${performanceContext}
-Write the full, comprehensive lecture notes covering all of the following:
-1. Conceptual Introduction & Intuition (physical/theoretical foundations adapted to ${studentLevel} level)
-2. Governing Principles, Proofs & Key Equations (LaTeX $$ for display math cards)
-3. Step-by-Step Worked Numerical Problem with Full Calculations and Units
-4. Comparative Characteristics / Parameter Analysis Table
-5. Real-World Applications, Key Rules & Common Traps (use > blockquotes for important rules)
-6. Summary & Key Takeaways`;
 
+Generate the FULL, comprehensive, detailed, and spacious lecture notes for this day.
+The content should be rich and thorough — a student should be able to master all of today's topics by reading this alone.
+For ${studentLevel} level, this means:
+${studentLevel === "Beginner" ? "- Extra analogies, simple language, all steps shown, 'In simple words' summaries after each concept." : ""}
+${studentLevel === "Intermediate" ? "- Connected theory to application, complete derivations, numerical examples with realistic values." : ""}
+${studentLevel === "Advanced" ? "- Deep rigor, proofs, edge cases, research connections, industry-realistic examples." : ""}`;
 
       try {
         generatedMarkdown = await provider.generateText(userPrompt, systemPrompt);
@@ -225,30 +256,59 @@ Write the full, comprehensive lecture notes covering all of the following:
       }
     }
 
-    if (!generatedMarkdown.trim()) {
-      generatedMarkdown = `## ${dayPlan.title}
+    // ── STRIP ANY RAW HTML LEFTOVERS FROM AI OUTPUT ──
+    if (generatedMarkdown) {
+      generatedMarkdown = generatedMarkdown
+        // Remove HTML div/span/style tags but keep content inside them
+        .replace(/<div[^>]*>/gi, "\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<span[^>]*>/gi, "")
+        .replace(/<\/span>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        // Strip any JSON wrappers if the model wrapped it
+        .replace(/^```(?:json|markdown)?\s*/i, "")
+        .replace(/\s*```\s*$/, "")
+        .trim();
+    }
 
-Welcome to Day ${dayPlan.dayNumber} of **${dayPlan.course.title}**. This module provides a comprehensive exploration of **${dayPlan.concept.name}** at the **${studentLevel}** level.
+    if (!generatedMarkdown.trim()) {
+      generatedMarkdown = `## 🎯 Learning Objectives
+
+By the end of Day ${dayPlan.dayNumber}, you will understand the key principles of **${dayPlan.concept.name}** at the **${studentLevel}** level.
 
 ---
 
-### 1. Conceptual Framework & Definition
+## 1. Introduction & Intuition
 
 ${dayPlan.concept.description}
 
-### 2. Key Topics for Today
+---
 
-${topics.map((t) => `- **${t}**: Core theory, governing physical/mathematical models, and practical application.`).join("\n")}
+## 2. Core Theory & Governing Equations
 
-### 3. Summary & Analytical Application
+Today's Topics:
 
-Mastery of **${dayPlan.concept.name}** requires a firm grasp of both underlying theoretical principles and practical problem-solving. Review the governing definitions and apply them to standard practice problems.
+${topics.map((t) => `### ${t}\n\nCore theory, governing equations, and practical application.`).join("\n\n")}
+
+---
+
+## 7. Summary & Key Takeaways
+
+> **Key Point:** Mastery of **${dayPlan.concept.name}** requires firm understanding of both underlying theoretical principles and practical problem-solving.
+
+---
+
+## 📚 References & Further Reading
+
+- [Wikipedia — ${dayPlan.concept.name}](https://en.wikipedia.org/wiki/${encodeURIComponent(dayPlan.concept.name)}) — Overview and background
+- [Khan Academy](https://www.khanacademy.org) — Foundation-level video explanations
+- [YouTube Search](https://www.youtube.com/results?search_query=${encodeURIComponent(dayPlan.concept.name + " explained")}) — Video tutorials
 `;
     }
 
     const nextVersionNumber = lesson.versions.length + 1;
 
-    // Save the new LessonVersion in database (Never overwrite)
+    // Save the new LessonVersion in database (Never overwrite existing versions)
     const newVersion = await prisma.lessonVersion.create({
       data: {
         lessonId: lesson.id,
@@ -272,5 +332,3 @@ Mastery of **${dayPlan.concept.name}** requires a firm grasp of both underlying 
     };
   }
 }
-
-

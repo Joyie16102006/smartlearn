@@ -164,6 +164,11 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
 
   const handleOpenExplain = async (conceptOrId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    // Determine if this is a long text selection or a short concept name
+    const isSelection = conceptOrId.length > 30;
+    const modalTitle = isSelection
+      ? `✦ AI Summary`
+      : `Concept Explained: ${conceptOrId.substring(0, 50)}`;
     try {
       const res = await fetch("/api/ai/explain", {
         method: "POST",
@@ -178,7 +183,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
       if (data.simpleExplanation) {
         setSelectedExplanation({
           id: `dyn-${Date.now()}`,
-          title: `Concept Breakdown: ${conceptOrId.substring(0, 50)}`,
+          title: modalTitle,
           simpleExplanation: data.simpleExplanation,
           example: data.example,
           formulaOrDiagram: data.keyFormula || undefined,
