@@ -101,6 +101,7 @@ ${videoLinks.join("\n")}
 export interface LessonGenerationResult {
   markdownContent: string;
   versionNumber: number;
+  totalVersions: number;
   generatedByModel: string;
   lessonId: string;
 }
@@ -168,6 +169,7 @@ export class LessonService {
         return {
           markdownContent: requested.markdownContent,
           versionNumber: requested.versionNumber,
+          totalVersions: lesson.versions.length,
           generatedByModel: requested.generatedByModel,
           lessonId: lesson.id,
         };
@@ -180,6 +182,7 @@ export class LessonService {
       return {
         markdownContent: latest.markdownContent,
         versionNumber: latest.versionNumber,
+        totalVersions: lesson.versions.length,
         generatedByModel: latest.generatedByModel,
         lessonId: lesson.id,
       };
@@ -420,6 +423,7 @@ ${topics.map((t) => `### ${t}\n\nCore theory, governing equations, and practical
     return {
       markdownContent: newVersion.markdownContent,
       versionNumber: newVersion.versionNumber,
+      totalVersions: nextVersionNumber,
       generatedByModel: newVersion.generatedByModel,
       lessonId: lesson.id,
     };

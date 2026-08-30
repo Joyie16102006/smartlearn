@@ -19,8 +19,10 @@ import {
   Clock,
   RotateCcw,
   ListChecks,
+  ChevronLeft,
   ChevronRight,
   RefreshCw,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/components/layout/SidebarContext";
@@ -73,6 +75,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
   // Markdown content from database / AI
   const [lectureMarkdown, setLectureMarkdown] = useState<string>("");
   const [currentVersion, setCurrentVersion] = useState<number>(1);
+  const [totalVersions, setTotalVersions] = useState<number>(1);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isLoadingLecture, setIsLoadingLecture] = useState(true);
 
@@ -95,6 +98,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
       if (data.markdownContent) {
         setLectureMarkdown(data.markdownContent);
         setCurrentVersion(data.versionNumber || 1);
+        setTotalVersions(data.totalVersions || data.versionNumber || 1);
       }
     } catch (err) {
       console.error("Failed to load lesson:", err);
@@ -114,6 +118,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
       if (data.markdownContent) {
         setLectureMarkdown(data.markdownContent);
         setCurrentVersion(data.versionNumber);
+        setTotalVersions(data.totalVersions || data.versionNumber);
       }
     } catch (err) {
       console.error("Failed to regenerate lesson:", err);
@@ -355,18 +360,42 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
           <div className="max-w-3xl lg:max-w-4xl mx-auto px-8 sm:px-12 py-8 space-y-8">
 
 
-            {/* Header badge & Version info */}
+            {/* Header: Professional Study Notes & ChatGPT-style Version Switcher (< 1/2 >) */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
-              <div className="flex items-center gap-2">
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 border border-zinc-200 text-[10px] font-mono font-semibold text-zinc-700">
-                  <Sparkles className="w-3 h-3" />
-                  Lecture Workspace
+              <div className="flex items-center gap-3">
+                {/* Professional Section Label */}
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800 tracking-tight">
+                  <BookOpen className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Study Notes</span>
                 </div>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  Version {currentVersion}
-                </span>
+
+                {/* ChatGPT-style version switcher: < 1/2 > */}
+                <div className="inline-flex items-center gap-0.5 bg-zinc-100/90 border border-zinc-200/80 rounded-md px-1 py-0.5 text-zinc-600 shadow-2xs">
+                  <button
+                    onClick={() => fetchLesson(currentVersion - 1)}
+                    disabled={currentVersion <= 1 || isLoadingLecture || isRegenerating}
+                    className="p-0.5 rounded hover:bg-zinc-200/80 disabled:opacity-25 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    title="Previous version"
+                    aria-label="Previous version"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-[11px] font-mono font-semibold px-1 text-zinc-700 select-none">
+                    {currentVersion}/{totalVersions}
+                  </span>
+                  <button
+                    onClick={() => fetchLesson(currentVersion + 1)}
+                    disabled={currentVersion >= totalVersions || isLoadingLecture || isRegenerating}
+                    className="p-0.5 rounded hover:bg-zinc-200/80 disabled:opacity-25 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    title="Next version"
+                    aria-label="Next version"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
                 {day.status === "completed" && (
-                  <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-mono font-bold">
+                  <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-semibold rounded-md">
                     Mastered ✓
                   </span>
                 )}
@@ -375,11 +404,11 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
               {/* Regenerate Version Button */}
               <button
                 onClick={handleRegenerateLesson}
-                disabled={isRegenerating}
-                className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
+                disabled={isRegenerating || isLoadingLecture}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
                 title="Generate a new version of this lesson"
               >
-                <RefreshCw className={cn("w-3 h-3", isRegenerating && "animate-spin")} />
+                <RefreshCw className={cn("w-3.5 h-3.5", isRegenerating && "animate-spin")} />
                 <span>{isRegenerating ? "Regenerating..." : "Regenerate"}</span>
               </button>
             </div>
@@ -395,7 +424,7 @@ export const DayLearningView: React.FC<DayLearningViewProps> = ({
                 <div className="h-3.5 bg-zinc-100 w-2/3" />
                 <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 pt-3">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600" />
-                  <span>Loading lecture workspace from database…</span>
+                  <span>Loading study notes from database…</span>
                 </div>
               </div>
             ) : (
