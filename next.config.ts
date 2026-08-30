@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
     appIsrStatus: false,
     buildActivity: false,
   },
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "katex",
+      "remark-math",
+      "rehype-katex",
+      "react-markdown",
+    ],
+  },
 };
 
 export default nextConfig;

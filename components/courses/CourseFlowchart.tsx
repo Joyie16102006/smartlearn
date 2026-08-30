@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ConceptNode } from "@/types";
 import { CheckCircle2, Circle, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -102,63 +102,66 @@ export const CourseFlowchart: React.FC<CourseFlowchartProps> = ({
     if (selectedConceptId) setActiveId(selectedConceptId);
   }, [selectedConceptId]);
 
-  // Compute node positions from topological layout
-  const layout = computeLayout(concepts);
+  // Compute node positions and edges inside useMemo to eliminate render lag
+  const { canvasW, canvasH, nodePositions, edges } = useMemo(() => {
+    const layout = computeLayout(concepts);
 
-  // Find max col and max rows per col for canvas sizing
-  let maxCol = 0;
-  const rowsPerCol = new Map<number, number>();
-  layout.forEach(({ col, row }) => {
-    if (col > maxCol) maxCol = col;
-    rowsPerCol.set(col, Math.max(rowsPerCol.get(col) ?? 0, row + 1));
-  });
+    let maxCol = 0;
+    const rowsPerCol = new Map<number, number>();
+    layout.forEach(({ col, row }) => {
+      if (col > maxCol) maxCol = col;
+      rowsPerCol.set(col, Math.max(rowsPerCol.get(col) ?? 0, row + 1));
+    });
 
-  const maxRows = Math.max(...Array.from(rowsPerCol.values()), 1);
-  const canvasW = (maxCol + 1) * (NODE_W + COL_GAP) + CANVAS_PAD * 2 - COL_GAP;
-  const canvasH = maxRows * (NODE_H + ROW_GAP) + CANVAS_PAD * 2 - ROW_GAP;
+    const maxRows = Math.max(...Array.from(rowsPerCol.values()), 1);
+    const canvasW = (maxCol + 1) * (NODE_W + COL_GAP) + CANVAS_PAD * 2 - COL_GAP;
+    const canvasH = maxRows * (NODE_H + ROW_GAP) + CANVAS_PAD * 2 - ROW_GAP;
 
-  // Build positions map for all concept nodes
-  const nodePositions = new Map<string, { x: number; y: number }>();
-  concepts.forEach((c) => {
-    const pos = layout.get(c.id);
-    if (pos) {
-      const rowsInThisCol = rowsPerCol.get(pos.col) ?? 1;
-      // vertically center nodes in each column
-      const totalColH = rowsInThisCol * (NODE_H + ROW_GAP) - ROW_GAP;
-      const startY = CANVAS_PAD + (canvasH - CANVAS_PAD * 2 - totalColH) / 2;
-      nodePositions.set(c.id, {
-        x: CANVAS_PAD + pos.col * (NODE_W + COL_GAP),
-        y: startY + pos.row * (NODE_H + ROW_GAP),
-      });
-    }
-  });
-
-  // Build edges list: from prerequisite → this concept
-  const edges: Array<{
-    fromId: string;
-    toId: string;
-    fromStatus: string;
-    toStatus: string;
-  }> = [];
-  const idMap = new Map(concepts.map((c) => [c.id, c]));
-  concepts.forEach((c) => {
-    (c.prerequisites || []).forEach((prereqId) => {
-      const prereq = idMap.get(prereqId);
-      if (prereq && nodePositions.has(prereqId) && nodePositions.has(c.id)) {
-        edges.push({
-          fromId: prereqId,
-          toId: c.id,
-          fromStatus: prereq.status,
-          toStatus: c.status,
+    const nodePositions = new Map<string, { x: number; y: number }>();
+    concepts.forEach((c) => {
+      const pos = layout.get(c.id);
+      if (pos) {
+        const rowsInThisCol = rowsPerCol.get(pos.col) ?? 1;
+        const totalColH = rowsInThisCol * (NODE_H + ROW_GAP) - ROW_GAP;
+        const startY = CANVAS_PAD + (canvasH - CANVAS_PAD * 2 - totalColH) / 2;
+        nodePositions.set(c.id, {
+          x: CANVAS_PAD + pos.col * (NODE_W + COL_GAP),
+          y: startY + pos.row * (NODE_H + ROW_GAP),
         });
       }
     });
-  });
 
-  const handleNodeClick = (concept: ConceptNode) => {
-    setActiveId(concept.id);
-    onSelectConcept?.(concept);
-  };
+    const edges: Array<{
+      fromId: string;
+      toId: string;
+      fromStatus: string;
+      toStatus: string;
+    }> = [];
+    const idMap = new Map(concepts.map((c) => [c.id, c]));
+    concepts.forEach((c) => {
+      (c.prerequisites || []).forEach((prereqId) => {
+        const prereq = idMap.get(prereqId);
+        if (prereq && nodePositions.has(prereqId) && nodePositions.has(c.id)) {
+          edges.push({
+            fromId: prereqId,
+            toId: c.id,
+            fromStatus: prereq.status,
+            toStatus: c.status,
+          });
+        }
+      });
+    });
+
+    return { canvasW, canvasH, nodePositions, edges };
+  }, [concepts]);
+
+  const handleNodeClick = useCallback(
+    (concept: ConceptNode) => {
+      setActiveId(concept.id);
+      onSelectConcept?.(concept);
+    },
+    [onSelectConcept]
+  );
 
   const completedCount = concepts.filter((c) => c.status === "completed").length;
 
@@ -225,7 +228,7 @@ export const CourseFlowchart: React.FC<CourseFlowchartProps> = ({
                 </marker>
               ))}
             </defs>
-            {edges.map(({ fromId, toId, fromStatus, toStatus }) => {
+            {edges.map(({ fromId, toId, fromStatus, toStatus }: { fromId: string; toId: string; fromStatus: string; toStatus: string }) => {
               const from = nodePositions.get(fromId);
               const to = nodePositions.get(toId);
               if (!from || !to) return null;

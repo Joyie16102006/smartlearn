@@ -75,29 +75,31 @@ export default function DashboardPage() {
       {courses.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {courses.map((course) => {
-            const isTodayDone = Boolean(
-              course.daysList?.find((d) => d.dayNumber === course.currentDay)?.status === "completed"
+            const isStreakActive = Boolean(
+              (course.streakDays && course.streakDays > 0) ||
+              course.daysList?.some((d) => d.status === "completed") ||
+              course.progressPercentage > 0
             );
             return (
               <div
                 key={course.id}
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-xs font-mono transition-colors",
-                  isTodayDone
-                    ? "border-orange-200 bg-orange-50/90 text-orange-950"
+                  isStreakActive
+                    ? "border-orange-200 bg-orange-50/90 text-orange-950 font-medium"
                     : "border-zinc-200 bg-zinc-50 text-zinc-700"
                 )}
               >
                 <Flame
                   className={cn(
                     "w-3 h-3 transition-colors",
-                    isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+                    isStreakActive ? "text-orange-500 fill-orange-500" : "text-zinc-400"
                   )}
                 />
                 <span className="font-semibold text-zinc-900 truncate max-w-[140px]">
                   {course.title}:
                 </span>
-                <span className={isTodayDone ? "text-orange-800 font-medium" : "text-zinc-600"}>
+                <span className={isStreakActive ? "text-orange-800 font-medium" : "text-zinc-600"}>
                   {course.streakDays || 1}d streak
                 </span>
               </div>
@@ -136,8 +138,10 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
           {courses.map((course) => {
-            const isTodayDone = Boolean(
-              course.daysList?.find((d) => d.dayNumber === course.currentDay)?.status === "completed"
+            const isStreakActive = Boolean(
+              (course.streakDays && course.streakDays > 0) ||
+              course.daysList?.some((d) => d.status === "completed") ||
+              course.progressPercentage > 0
             );
             return (
               <div
@@ -160,19 +164,19 @@ export default function DashboardPage() {
                       </h3>
                     </div>
 
-                    {/* Course Streak Badge (Orange if today completed, normal if not yet) */}
+                    {/* Course Streak Badge (Vibrant orange when active) */}
                     <div
                       className={cn(
                         "shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border text-[11px] font-mono transition-colors",
-                        isTodayDone
-                          ? "border-orange-200 bg-orange-50/90 text-orange-950"
+                        isStreakActive
+                          ? "border-orange-200 bg-orange-50/90 text-orange-950 font-medium"
                           : "border-zinc-200 bg-zinc-50 text-zinc-700"
                       )}
                     >
                       <Flame
                         className={cn(
                           "w-3 h-3 transition-colors",
-                          isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+                          isStreakActive ? "text-orange-500 fill-orange-500" : "text-zinc-400"
                         )}
                       />
                       <span>{course.streakDays || 1}d</span>

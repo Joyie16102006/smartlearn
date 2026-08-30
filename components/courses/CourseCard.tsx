@@ -10,8 +10,11 @@ interface CourseCardProps {
 }
 
 export const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
-  const currentDayPlan = course.daysList?.find((d) => d.dayNumber === course.currentDay);
-  const isTodayDone = currentDayPlan?.status === "completed";
+  const isStreakActive = Boolean(
+    (course.streakDays && course.streakDays > 0) ||
+    course.daysList?.some((d) => d.status === "completed") ||
+    course.progressPercentage > 0
+  );
 
   return (
     <div className="bg-white rounded-md border border-zinc-200 hover:border-zinc-400 transition-colors flex flex-col justify-between p-5 space-y-3.5 group">
@@ -26,19 +29,19 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
               {course.title}
             </h3>
           </div>
-          {/* Per-Course Streak (Turns orange when today's work is completed) */}
+          {/* Per-Course Streak (Vibrant orange when active) */}
           <div
             className={cn(
               "shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-xs border text-[11px] font-mono transition-colors",
-              isTodayDone
-                ? "border-orange-200 bg-orange-50/90 text-orange-950"
+              isStreakActive
+                ? "border-orange-200 bg-orange-50/90 text-orange-950 font-medium"
                 : "border-zinc-200 bg-zinc-50 text-zinc-700"
             )}
           >
             <Flame
               className={cn(
                 "w-3 h-3 transition-colors",
-                isTodayDone ? "text-orange-500 fill-orange-500" : "text-zinc-400"
+                isStreakActive ? "text-orange-500 fill-orange-500" : "text-zinc-400"
               )}
             />
             <span>{course.streakDays || 1}d</span>
