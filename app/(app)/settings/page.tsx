@@ -14,14 +14,15 @@ import {
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [name, setName] = useState("Learner");
-  const [email, setEmail] = useState("user@smartlearn.ai");
+  const [name, setName] = useState("Vitian");
+  const [email, setEmail] = useState("student@vitapstudent.ac.in");
   const [preferredTime, setPreferredTime] = useState("6:00 PM");
   const [dailyDuration, setDailyDuration] = useState(60);
   const [learningStyle, setLearningStyle] = useState("visual-practice");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
 
   useEffect(() => {
     fetch("/api/user/preferences")
@@ -116,9 +117,10 @@ export default function SettingsPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900 text-zinc-900"
-                  placeholder="user@smartlearn.ai"
+                  placeholder="student@vitapstudent.ac.in"
                   required
                 />
+
               </div>
             </div>
           </Card>

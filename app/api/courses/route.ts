@@ -192,11 +192,12 @@ export async function POST(req: Request) {
       user = await prisma.user.create({
         data: {
           id: "user-default",
-          name: "Learner",
-          email: "user@smartlearn.ai",
+          name: "Vitian",
+          email: "student@vitapstudent.ac.in",
         },
       });
     }
+
 
     // 2. Generate Curriculum & DAG via Model 2 (Nemotron 550B / Source Parser)
     const curriculum = await CurriculumService.generateCurriculum({

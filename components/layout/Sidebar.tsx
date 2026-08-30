@@ -121,22 +121,21 @@ export const Sidebar: React.FC = () => {
             href="/settings"
             className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-zinc-100 transition-colors group"
           >
-            <img
-              src={mockUserProfile.avatarUrl}
-              alt={mockUserProfile.name}
-              className="w-7 h-7 rounded-sm object-cover border border-zinc-200 grayscale contrast-125 shrink-0"
-            />
+            <div className="w-7 h-7 rounded-md bg-zinc-900 text-white flex items-center justify-center text-xs font-bold font-mono shrink-0 shadow-2xs border border-zinc-800">
+              V
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-zinc-900 group-hover:text-black transition-colors truncate">
-                {mockUserProfile.name}
+                Vitian
               </p>
               <p className="text-[10px] text-zinc-500 truncate font-mono">
-                Student Account
+                student@vitapstudent.ac.in
               </p>
             </div>
           </Link>
         </div>
       </div>
     </aside>
+
   );
 };

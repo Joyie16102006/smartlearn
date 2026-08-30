@@ -14,9 +14,9 @@ export class AssistantService {
   /**
    * Answer a student's query with full database context.
    */
-  static async chat(userMessage: string, userEmail = "alex.morgan@smartlearn.ai"): Promise<string> {
+  static async chat(userMessage: string, userEmail = "student@vitapstudent.ac.in"): Promise<string> {
     // 1. Fetch live student context from database
-    const user = await prisma.user.findUnique({
+    const user = (await prisma.user.findUnique({
       where: { email: userEmail },
       include: {
         courses: {
@@ -31,17 +31,32 @@ export class AssistantService {
           take: 3,
         },
       },
-    });
+    })) || (await prisma.user.findFirst({
+      include: {
+        courses: {
+          include: {
+            daysList: {
+              where: { status: "current" },
+            },
+          },
+        },
+        mistakeLogs: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
+    }));
 
     const activeCourse = user?.courses[0];
     const currentDay = activeCourse?.daysList[0];
 
     const studentTelemetry = `Student Profile:
-Name: ${user?.name || "Alex Morgan"}
+Name: ${user?.name || "Vitian"}
 Streak: ${user?.streakDays || 7} Days
-Active Courses: ${user?.courses.map((c) => `${c.title} (Day ${c.currentDay}/${c.totalDays}, ${c.progressPercentage}% done)`).join("; ") || "Digital Electronics"}
-Current Focus: ${activeCourse?.title || "Digital Electronics"} — Day ${currentDay?.dayNumber || 8}: ${currentDay?.title || "Multiplexers"}
-Recent Diagnostic Weak Areas: ${user?.mistakeLogs.map((m) => `${m.conceptId}: ${m.questionTitle} (Error: ${m.errorType})`).join(" | ") || "K-Map 4-corner quad wrap-around"}`;
+Active Courses: ${user?.courses.map((c) => `${c.title} (Day ${c.currentDay}/${c.totalDays}, ${c.progressPercentage}% done)`).join("; ") || "Communication Systems"}
+Current Focus: ${activeCourse?.title || "Communication Systems"} — Day ${currentDay?.dayNumber || 1}: ${currentDay?.title || "Foundations"}
+Recent Diagnostic Weak Areas: ${user?.mistakeLogs.map((m) => `${m.conceptId}: ${m.questionTitle} (Error: ${m.errorType})`).join(" | ") || "None recorded"}`;
+
 
     const provider = getAIProvider();
 

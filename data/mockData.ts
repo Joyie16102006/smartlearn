@@ -10,14 +10,15 @@ import {
 } from "@/types";
 
 export const mockUserProfile: UserProfile = {
-  name: "Learner",
-  avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-  email: "user@smartlearn.ai",
+  name: "Vitian",
+  avatarUrl: "https://api.dicebear.com/7.x/initials/svg?seed=Vitian&backgroundColor=18181b&textColor=ffffff",
+  email: "student@vitapstudent.ac.in",
   streakDays: 0,
   totalHoursLearned: 0,
   overallMasteryPercentage: 0,
   activeCoursesCount: 0,
 };
+
 
 export const mockCourses: Course[] = [];
 export const mockDigitalElectronicsDays: DayPlan[] = [];

@@ -13,12 +13,13 @@ generator client {
 // ----------------------------------------------------
 model User {
   id                      String           @id @default(cuid())
-  name                    String           @default("Alex Morgan")
-  email                   String           @unique @default("alex.morgan@smartlearn.ai")
-  avatarUrl               String           @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
+  name                    String           @default("Vitian")
+  email                   String           @unique @default("student@vitapstudent.ac.in")
+  avatarUrl               String           @default("https://api.dicebear.com/7.x/initials/svg?seed=Vitian&backgroundColor=18181b&textColor=ffffff")
   streakDays              Int              @default(7)
   totalHoursLearned       Float            @default(28.5)
   overallMasteryPercentage Int             @default(72)
+
   activeCoursesCount      Int              @default(3)
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt

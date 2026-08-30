@@ -17,8 +17,8 @@ export async function GET() {
       user = await prisma.user.create({
         data: {
           id: "user-default",
-          name: "Learner",
-          email: "user@smartlearn.ai",
+          name: "Vitian",
+          email: "student@vitapstudent.ac.in",
           preferences: {
             create: {
               preferredTime: "6:00 PM",
@@ -34,8 +34,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      name: user.name,
-      email: user.email,
+      name: user.name || "Vitian",
+      email: user.email || "student@vitapstudent.ac.in",
       avatarUrl: user.avatarUrl,
       streakDays: user.streakDays,
       totalHoursLearned: user.totalHoursLearned,
@@ -65,11 +65,12 @@ export async function PUT(req: Request) {
       user = await prisma.user.create({
         data: {
           id: "user-default",
-          name: name || "Learner",
-          email: email || "user@smartlearn.ai",
+          name: name || "Vitian",
+          email: email || "student@vitapstudent.ac.in",
         },
       });
     }
+
 
     // Update user display name & email
     const updatedUser = await prisma.user.update({

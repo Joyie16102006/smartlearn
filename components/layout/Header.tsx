@@ -62,20 +62,19 @@ export const Header: React.FC = () => {
           href="/settings"
           className="flex items-center gap-2 pl-2 border-l border-zinc-200 hover:opacity-80 transition-opacity"
         >
-          <img
-            src={mockUserProfile.avatarUrl}
-            alt={mockUserProfile.name}
-            className="w-7 h-7 rounded-sm object-cover border border-zinc-200 grayscale contrast-125"
-          />
+          <div className="w-7 h-7 rounded-md bg-zinc-900 text-white flex items-center justify-center text-xs font-bold font-mono shrink-0 shadow-2xs border border-zinc-800">
+            V
+          </div>
           <div className="hidden sm:block text-left">
             <span className="text-xs font-semibold text-zinc-900 block leading-tight">
               Profile
             </span>
-            <span className="text-[10px] text-zinc-400 font-mono block">
-              {mockUserProfile.name}
+            <span className="text-[10px] text-zinc-500 font-mono block">
+              Vitian
             </span>
           </div>
         </Link>
+
       </div>
     </header>
   );
