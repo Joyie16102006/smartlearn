@@ -143,7 +143,7 @@ function buildScheduleFromConcepts(
 }
 
 /**
- * Build concepts directly from extracted document units (Source-of-truth fallback)
+ * Build concepts directly from extracted document units (Multi-Branch DAG structure)
  */
 function buildConceptsFromUnits(
   units: ExtractedUnit[],
@@ -165,7 +165,26 @@ function buildConceptsFromUnits(
       .slice(0, 30) || `unit-${idx + 1}`;
 
     const conceptId = `c-${idx + 1}-${slug}`;
-    const prereqId = idx > 0 ? concepts[idx - 1]?.id : null;
+
+    // Multi-branch DAG prerequisites:
+    // Node 0: Root
+    // Node 1 & 2: Parallel branches from Node 0
+    // Node 3: Sub-branch from Node 1
+    // Node 4: Sub-branch from Node 2
+    // Node 5+: Convergence from multiple upstream branches
+    let prereqs: string[] = [];
+    if (idx === 1 || idx === 2) {
+      if (concepts[0]) prereqs.push(concepts[0].id);
+    } else if (idx === 3) {
+      if (concepts[1]) prereqs.push(concepts[1].id);
+    } else if (idx === 4) {
+      if (concepts[2]) prereqs.push(concepts[2].id);
+    } else if (idx >= 5) {
+      const p1 = concepts[idx - 2]?.id;
+      const p2 = concepts[idx - 1]?.id;
+      if (p1) prereqs.push(p1);
+      if (p2 && p2 !== p1) prereqs.push(p2);
+    }
 
     unitTopicMap.set(conceptId, unit.subtopics);
 
@@ -177,7 +196,7 @@ function buildConceptsFromUnits(
       difficulty: idx === 0 ? "Beginner" : idx < units.length - 1 ? "Intermediate" : "Advanced",
       estimatedMinutes: safeMinutes,
       description: `In-depth study of ${cleanName} covering ${unit.subtopics.slice(0, 3).join(", ") || "core principles"}.`,
-      prerequisites: prereqId ? [prereqId] : [],
+      prerequisites: prereqs,
       dependents: [],
       keyFormulas: unit.formulas.slice(0, 4),
       dayAssigned: 1,
@@ -188,9 +207,8 @@ function buildConceptsFromUnits(
 }
 
 /**
- * Domain-Adaptive Title Fallback
- * Detects the domain from a course title and returns appropriate concept modules.
- * Covers Electronics, CS, Math, Physics, Mechanical, Biology, and generic STEM.
+ * Domain-Adaptive Title Fallback with Multi-Branch Knowledge Tree Structure
+ * Generates true 2D branching trees (Root -> 2 parallel tracks -> Sub-branches -> Capstone Convergence)
  */
 function synthesizeDomainAdaptiveConcepts(
   title: string,
@@ -200,70 +218,79 @@ function synthesizeDomainAdaptiveConcepts(
   const t = title.toLowerCase();
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20);
 
-  let modules: Array<{ name: string; desc: string; diff: "Beginner" | "Intermediate" | "Advanced" }>;
+  interface ModuleDef {
+    name: string;
+    desc: string;
+    diff: "Beginner" | "Intermediate" | "Advanced";
+    prereqIndices: number[];
+  }
 
-  if (/electronic|circuit|semiconductor|diode|transistor|amplif|bjt|mosfet|signal|dc|ac|analog|digital|logic|vhdl|verilog|power|electr/i.test(t)) {
+  let modules: ModuleDef[];
+
+  // 1. Java & Object Oriented Programming (OOP)
+  if (/java|oop|object-oriented|class|encapsulation|polymorphism|inheritance|abstraction|spring|jvm/i.test(t)) {
     modules = [
-      { name: `${title} — Semiconductor Fundamentals`, desc: `Atomic structure, energy bands, carrier transport equations.`, diff: "Beginner" },
-      { name: `${title} — p-n Junction & Diodes`, desc: `Junction physics, diode V-I characteristics, load-line analysis.`, diff: "Beginner" },
-      { name: `${title} — Bipolar Junction Transistors`, desc: `BJT operating regions, DC biasing, h-parameter equivalent circuits.`, diff: "Intermediate" },
-      { name: `${title} — Field-Effect Transistors`, desc: `MOSFET/JFET operation, pinch-off, small-signal models.`, diff: "Intermediate" },
-      { name: `${title} — Amplifier Circuits & Feedback`, desc: `Common-emitter/source configurations, feedback topologies, gain analysis.`, diff: "Intermediate" },
-      { name: `${title} — Frequency Response & Stability`, desc: `Bode plots, bandwidth, gain-bandwidth product, stability criteria.`, diff: "Advanced" },
+      { name: `${title} — Classes, Objects & OOP Foundations`, desc: `Class blueprints, instantiation, constructors, memory allocation, and the 'this' reference.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — Encapsulation & Inheritance Hierarchies`, desc: `Access modifiers (public/private/protected), data hiding, super keyword, and single/multilevel inheritance.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Polymorphism, Dynamic Binding & Interfaces`, desc: `Method overriding vs overloading, runtime dispatch, abstract classes vs interface contracts.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Exception Handling & Resource Management`, desc: `Try-catch-finally blocks, checked vs unchecked exceptions, custom exception hierarchies, and ARM try-with-resources.`, diff: "Intermediate", prereqIndices: [1] },
+      { name: `${title} — Java Collections & Generics`, desc: `List, Set, Map hierarchies, ArrayList vs LinkedList, HashMap internals, and generic type parameters.`, diff: "Intermediate", prereqIndices: [2] },
+      { name: `${title} — Multithreading, Concurrency & Design Patterns`, desc: `Thread lifecycle, synchronization, volatile/atomic variables, and classic OOP Design Patterns (Singleton, Factory, Strategy).`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
-  } else if (/algorithm|data structure|python|java|c\+\+|software|program|compil|database|operating system|network|machine learn|artificial intel|computer science|web dev|react|node/i.test(t)) {
+  }
+  // 2. Data Structures & Algorithms
+  else if (/algorithm|data structure|dsa|tree|graph|binary search|sorting|dynamic programming|greedy/i.test(t)) {
     modules = [
-      { name: `${title} — Fundamentals & Complexity`, desc: `Core language constructs, time/space complexity (Big-O), and problem framing.`, diff: "Beginner" },
-      { name: `${title} — Linear Data Structures`, desc: `Arrays, linked lists, stacks, queues — implementation and traversal algorithms.`, diff: "Beginner" },
-      { name: `${title} — Non-Linear Data Structures`, desc: `Trees, graphs (BFS/DFS), heaps, and balanced BSTs.`, diff: "Intermediate" },
-      { name: `${title} — Sorting & Searching Algorithms`, desc: `Merge sort, quick sort, binary search — correctness proofs and performance.`, diff: "Intermediate" },
-      { name: `${title} — Dynamic Programming & Greedy`, desc: `Optimal substructure, memoization, DP recurrences, greedy proofs.`, diff: "Advanced" },
-      { name: `${title} — System Design & Applications`, desc: `Architecture patterns, scalability, real-world problem solving.`, diff: "Advanced" },
+      { name: `${title} — Complexity Analysis & Core Fundamentals`, desc: `Asymptotic analysis (Big-O, Big-Omega, Big-Theta), recursion trees, space-time tradeoffs.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — Linear Data Structures & Operations`, desc: `Dynamic arrays, singly/doubly linked lists, stack evaluation, queue variants.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Tree Structures & Hierarchical Data`, desc: `Binary trees, BST traversal (pre/in/post), AVL balancing, heaps and priority queues.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Graph Algorithms & Traversals`, desc: `Adjacency representations, BFS, DFS, Dijkstra shortest path, topological sorting.`, diff: "Intermediate", prereqIndices: [2] },
+      { name: `${title} — Dynamic Programming & Greedy Strategies`, desc: `Overlapping subproblems, optimal substructure, 1D/2D memoization, greedy choice proofs.`, diff: "Advanced", prereqIndices: [1] },
+      { name: `${title} — Advanced Optimization & Scalable Systems`, desc: `Disjoint-set union, trie trees, segment trees, and real-world system optimization.`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
-  } else if (/math|calculus|algebra|statistics|probability|differenti|integral|fourier|laplace|number theory|discrete math|topology/i.test(t)) {
+  }
+  // 3. Electronic Devices & Circuits
+  else if (/electronic|circuit|semiconductor|diode|transistor|amplif|bjt|mosfet|signal|dc|ac|analog|digital|logic|vhdl|verilog|power|electr/i.test(t)) {
     modules = [
-      { name: `${title} — Definitions & Axioms`, desc: `Core definitions, notation, fundamental theorems, and proof strategies.`, diff: "Beginner" },
-      { name: `${title} — Core Operations & Properties`, desc: `Key operations, identities, and fundamental computational techniques.`, diff: "Beginner" },
-      { name: `${title} — Theorems & Formal Proofs`, desc: `Major theorems, corollaries, rigorous proof construction.`, diff: "Intermediate" },
-      { name: `${title} — Applied Problem Solving`, desc: `Worked problems, standard exam-style derivations, and worked examples.`, diff: "Intermediate" },
-      { name: `${title} — Advanced Topics & Extensions`, desc: `Generalizations, convergence analysis, advanced applications.`, diff: "Advanced" },
-      { name: `${title} — Integration & Cross-Domain Applications`, desc: `Connections to physics, engineering, and data science.`, diff: "Advanced" },
+      { name: `${title} — Semiconductor Physics & Band Theory`, desc: `Intrinsic/extrinsic semiconductors, Fermi level, carrier drift and diffusion.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — p-n Junctions, Diodes & Rectification`, desc: `Barrier potential, forward/reverse bias, Zener diodes, wave-shaping clippers and clampers.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Bipolar Junction Transistors (BJT) & Biasing`, desc: `NPN/PNP physics, CE/CB/CC configurations, DC load line, operating point stabilization.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Field-Effect Transistors (MOSFET & JFET)`, desc: `Enhancement/depletion MOSFETs, channel modulation, pinch-off, small-signal models.`, diff: "Intermediate", prereqIndices: [2] },
+      { name: `${title} — Small-Signal & Multi-Stage Amplifiers`, desc: `h-parameter analysis, frequency response, RC coupling, power stages.`, diff: "Intermediate", prereqIndices: [1, 2] },
+      { name: `${title} — Operational Amplifiers & Feedback Systems`, desc: `Negative/positive feedback, inverting/non-inverting op-amps, active filters, stability criteria.`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
-  } else if (/physics|mechanic|thermodynam|optic|quantum|electromag|relativity|wave|nuclear|fluid/i.test(t)) {
+  }
+  // 4. Mathematics & Calculus
+  else if (/math|calculus|algebra|statistics|probability|differenti|integral|fourier|laplace|discrete/i.test(t)) {
     modules = [
-      { name: `${title} — Physical Laws & Governing Equations`, desc: `Fundamental laws, SI units, physical constants, and dimensional analysis.`, diff: "Beginner" },
-      { name: `${title} — Kinematics & Dynamics`, desc: `Motion equations, Newton's laws, energy-work theorems.`, diff: "Beginner" },
-      { name: `${title} — Conservation Laws`, desc: `Conservation of energy, momentum, angular momentum — derivations and applications.`, diff: "Intermediate" },
-      { name: `${title} — Wave & Field Theory`, desc: `Wave equations, field concepts, superposition, interference.`, diff: "Intermediate" },
-      { name: `${title} — Thermodynamic Systems`, desc: `State functions, laws of thermodynamics, entropy, and heat engines.`, diff: "Intermediate" },
-      { name: `${title} — Advanced Quantum & Modern Physics`, desc: `Schrodinger equation, wave-particle duality, quantum numbers, nuclear models.`, diff: "Advanced" },
+      { name: `${title} — Foundations, Limits & Continuity`, desc: `Axioms, epsilon-delta definitions, fundamental limits, and continuity theorems.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — Differential Calculus & Derivative Applications`, desc: `Chain rule, implicit differentiation, Mean Value Theorem, optimization & rate analysis.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Integral Calculus & Accumulation`, desc: `Fundamental Theorem of Calculus, substitution, integration by parts, definite integrals.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Multivariable Analysis & Partial Derivatives`, desc: `Gradients, directional derivatives, tangent planes, Lagrange multipliers.`, diff: "Intermediate", prereqIndices: [1] },
+      { name: `${title} — Differential Equations & Vector Calculus`, desc: `First/second order ODEs, line integrals, Green's/Stokes' theorems.`, diff: "Advanced", prereqIndices: [2] },
+      { name: `${title} — Transforms, Series & Advanced Synthesis`, desc: `Taylor series convergence, Fourier analysis, Laplace transforms, and complex integration.`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
-  } else if (/mechanical|civil|structural|manufacturing|material|stress|strain|heat transfer|control system/i.test(t)) {
+  }
+  // 5. Physics & Applied Sciences
+  else if (/physics|mechanic|thermodynam|optic|quantum|electromag|relativity|wave|nuclear|fluid/i.test(t)) {
     modules = [
-      { name: `${title} — Engineering Mechanics`, desc: `Static equilibrium, free body diagrams, force analysis.`, diff: "Beginner" },
-      { name: `${title} — Material Properties & Behavior`, desc: `Stress-strain curves, elastic modulus, material failure criteria.`, diff: "Beginner" },
-      { name: `${title} — Structural Analysis`, desc: `Beam bending, shear force diagrams, bending moment diagrams.`, diff: "Intermediate" },
-      { name: `${title} — Fluid Mechanics`, desc: `Continuity equation, Bernoulli theorem, pipe flow, Reynolds number.`, diff: "Intermediate" },
-      { name: `${title} — Heat Transfer & Thermodynamics`, desc: `Conduction, convection, radiation, heat exchanger design.`, diff: "Intermediate" },
-      { name: `${title} — Advanced Design & Optimization`, desc: `FEM concepts, fatigue analysis, system optimization.`, diff: "Advanced" },
+      { name: `${title} — Governing Laws & Kinematics`, desc: `SI units, dimensional analysis, vector kinematics, and Newton's fundamental laws.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — Conservation Principles & Dynamics`, desc: `Work-energy theorem, momentum conservation, rotational dynamics, torque.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Electromagnetic Fields & Waves`, desc: `Coulomb's law, Gauss's law, magnetic flux, Faraday induction, wave equations.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Thermodynamics & Statistical Physics`, desc: `Laws of thermodynamics, heat engines, entropy, Maxwell relations.`, diff: "Intermediate", prereqIndices: [1] },
+      { name: `${title} — Optics & Wave Interference`, desc: `Geometric optics, Huygens principle, diffraction gratings, polarization.`, diff: "Intermediate", prereqIndices: [2] },
+      { name: `${title} — Modern & Quantum Physics`, desc: `Photoelectric effect, wave-particle duality, Schrodinger wave equation, atomic models.`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
-  } else if (/biology|biochem|genetics|micro|cell|anatomy|physiology|ecology|molecular|neuroscience/i.test(t)) {
+  }
+  // 6. General STEM / Technical Course Default
+  else {
     modules = [
-      { name: `${title} — Cell Biology & Biochemical Foundations`, desc: `Cell structure, biomolecules, metabolic pathways.`, diff: "Beginner" },
-      { name: `${title} — Genetics & DNA`, desc: `DNA replication, transcription, translation, Mendelian genetics.`, diff: "Beginner" },
-      { name: `${title} — Physiology & Systems`, desc: `Organ systems, homeostasis, regulatory mechanisms.`, diff: "Intermediate" },
-      { name: `${title} — Microbiology & Immunology`, desc: `Microbial classification, immune response, pathogens.`, diff: "Intermediate" },
-      { name: `${title} — Ecology & Evolution`, desc: `Population dynamics, natural selection, ecosystems.`, diff: "Intermediate" },
-      { name: `${title} — Advanced Molecular & Biotechnology`, desc: `PCR, CRISPR, recombinant DNA, bioinformatics.`, diff: "Advanced" },
-    ];
-  } else {
-    modules = [
-      { name: `${title} — Foundations & Core Definitions`, desc: `Fundamental terminology, governing laws, and primary analytical frameworks.`, diff: "Beginner" },
-      { name: `${title} — Core Principles & Methods`, desc: `Primary techniques, standard approaches, and essential problem-solving methods.`, diff: "Beginner" },
-      { name: `${title} — Systematic Analysis & Modeling`, desc: `Mathematical or logical models, derivations, and analytical methods.`, diff: "Intermediate" },
-      { name: `${title} — Practical Applications & Case Studies`, desc: `Real-world application, standard configurations, and worked examples.`, diff: "Intermediate" },
-      { name: `${title} — Advanced Topics & Optimization`, desc: `Edge cases, performance considerations, and advanced synthesis.`, diff: "Advanced" },
-      { name: `${title} — Integration & Capstone`, desc: `Cross-concept integration, capstone problem solving, and review.`, diff: "Advanced" },
+      { name: `${title} — Foundational Principles & Core Syntax`, desc: `Core definitions, underlying assumptions, standard notation, and first principles.`, diff: "Beginner", prereqIndices: [] },
+      { name: `${title} — Core Structure & Methodologies`, desc: `Primary methods, standard models, essential rules, and analytical framework.`, diff: "Beginner", prereqIndices: [0] },
+      { name: `${title} — Applied Concepts & Analytical Modeling`, desc: `Component interaction, formal derivations, problem deconstruction.`, diff: "Intermediate", prereqIndices: [0] },
+      { name: `${title} — Intermediate Practical Implementations`, desc: `Standard workflows, practical configurations, and worked technical examples.`, diff: "Intermediate", prereqIndices: [1] },
+      { name: `${title} — Advanced Specialization & Extensions`, desc: `Edge cases, high-level analysis, advanced synthesis, and performance considerations.`, diff: "Advanced", prereqIndices: [2] },
+      { name: `${title} — Capstone Synthesis & Systems Integration`, desc: `Comprehensive end-to-end integration, real-world case studies, and full mastery review.`, diff: "Advanced", prereqIndices: [3, 4] },
     ];
   }
 
@@ -272,15 +299,17 @@ function synthesizeDomainAdaptiveConcepts(
   const levelBoost: Record<string, number> = { Beginner: 0, Intermediate: 1, Advanced: 2 };
   const boost = levelBoost[level] ?? 0;
 
+  const conceptIds = modules.map((_, idx) => `c-${idx + 1}-${slug}`);
+
   return modules.map((m, idx) => ({
-    id: `c-${idx + 1}-${slug}`,
+    id: conceptIds[idx],
     name: m.name,
     slug: `${slug}-m${idx + 1}`,
     importance: "high" as const,
     difficulty: difficultyLadder[Math.min(difficultyLadder.indexOf(m.diff) + boost, 2)],
     estimatedMinutes: safeMinutes,
     description: m.desc,
-    prerequisites: idx > 0 ? [`c-${idx}-${slug}`] : [],
+    prerequisites: m.prereqIndices.map((i) => conceptIds[i]).filter(Boolean),
     dependents: [],
     keyFormulas: [],
     dayAssigned: 1,
@@ -319,35 +348,37 @@ export class CurriculumService {
         ? units.map((u, i) => `Unit ${i + 1}: ${u.title}\nTopics: ${u.subtopics.join(", ")}\nFormulas: ${u.formulas.join(", ")}`).join("\n\n")
         : params.sourceContext?.slice(0, 6000) || "";
 
-      const systemPrompt = `You are SmartLearn AI Course Architect.
+      const systemPrompt = `You are SmartLearn AI Course Architect & Knowledge Graph Engineer.
 Analyze the provided course title, student knowledge level, and syllabus material.
-Generate a structured knowledge graph (DAG) of 6 to 12 concept nodes matching the EXACT subject.
+Generate a structured, multi-branching Knowledge Tree (Directed Acyclic Graph - DAG) of 6 to 10 concept nodes matching the EXACT subject.
 
-HALLUCINATION GUARD — MANDATORY:
-1. Concept names MUST come ONLY from the syllabus / subject material provided. Do NOT invent topic names.
-2. NEVER use generic placeholder names like "Core Axioms", "Architectural Synthesis", or "Systematic Analysis".
-3. Do NOT include topics, formulas, or concepts that are NOT in the provided source material.
-4. If the source is limited, generate fewer (4-6) accurate concepts instead of inventing additional ones.
-5. Formulate prerequisites based on logical learning order (e.g. Diodes -> Transistors -> Amplifiers).
-6. Extract ONLY real equations and formulas directly stated in the material for keyFormulas.
-7. Provide 4 to 8 granular distinct subtopics per concept — each should map to one focused day of study.
-8. Calibrate all concept descriptions and difficulty to the student's knowledge level: ${params.level || "Intermediate"}.
+MANDATORY TREE & GRAPH STRUCTURE (CRITICAL):
+1. NEVER generate a single flat 1-line linear sequence (Node 1 -> Node 2 -> Node 3 -> Node 4). The curriculum MUST branch like a tree!
+2. Structure the concepts with multiple branching tracks:
+   - Root Node(s) [Level 0]: 1 foundational concept node with NO prerequisites ("prerequisites": []).
+   - Parallel Branch Tracks [Level 1]: 2 or 3 distinct specialization concepts that BOTH list the Root node as their prerequisite (e.g. "prerequisites": ["root-id"]).
+   - Intermediate Sub-branches [Level 2]: Concepts that deepen Level 1 tracks (e.g. "prerequisites": ["branch-a-id"]).
+   - Advanced Convergence / Capstone [Level 3]: 1 or 2 advanced concepts that depend on multiple upstream branches (e.g. "prerequisites": ["branch-a-id", "branch-b-id"]).
+3. Ensure prerequisite IDs strictly match the "id" of the corresponding concept in the "concepts" array.
+4. Concept names MUST be specific and accurately named for "${title}". NEVER use generic placeholder names like "Core Axioms" or "Linear Data Structures" if the course is about something else (e.g., for "Java OOP", use "Classes & Objects", "Inheritance", "Polymorphism", "Interfaces & Abstraction", "Exception Handling", "Collections & Generics").
+5. Calibrate all concept descriptions and difficulty to the student's knowledge level: ${params.level || "Intermediate"}.
+6. Provide 4 to 8 granular distinct subtopics per concept — each mapping to one focused study session.
 
 Return ONLY a valid JSON object (NO markdown wrapper, NO text outside the JSON) matching this schema:
 {
   "description": "2-3 sentence overview of what the student will master in this course",
-  "category": "Academic Subject Category (e.g. Electronic Devices & Circuits, Computer Science)",
+  "category": "Academic Subject Category (e.g. Computer Science, Electronic Engineering, Applied Mathematics)",
   "concepts": [
     {
-      "id": "short-kebab-id",
-      "name": "Exact Subject Concept Name from Syllabus",
+      "id": "c-unique-short-id",
+      "name": "Exact Subject Concept Name",
       "slug": "concept-slug",
       "importance": "high",
       "difficulty": "Beginner",
       "estimatedMinutes": ${safeMinutes},
       "description": "Concise concept overview grounded in the syllabus",
       "prerequisites": [],
-      "keyFormulas": ["Exact Formula from Source 1", "Exact Formula from Source 2"],
+      "keyFormulas": ["Exact Formula or Rule 1", "Exact Formula or Rule 2"],
       "subtopics": ["Specific Topic A", "Specific Topic B", "Specific Topic C", "Specific Topic D"]
     }
   ]
@@ -361,7 +392,7 @@ Schedule: ${safeTotalDays} days (${safeMinutes} mins/day)
 Syllabus / Units Material (GROUND TRUTH — use ONLY what is here):
 ${unitsContext}
 
-Synthesize 6 to 10 distinct concept nodes with prerequisite dependencies and 4-8 specific daily subtopics per concept. Stay strictly grounded to the source material above.`;
+Synthesize 6 to 8 distinct concept nodes structured as a multi-branching Knowledge Tree/DAG with branching prerequisites and 4-8 specific daily subtopics per concept.`;
 
       try {
         const result = await provider.generateJSON<{

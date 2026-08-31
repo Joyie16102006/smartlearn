@@ -11,17 +11,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Course title is required" }, { status: 400 });
     }
 
-    const systemPrompt = `You are SmartLearn AI Course Architect & Curriculum Synthesizer.
+    const systemPrompt = `You are SmartLearn AI Course Architect & Knowledge Graph Engineer.
 Given a course topic, student target goals, syllabus materials, and time budget, you decompose the subject into:
-1. An ordered Directed Acyclic Graph (DAG) of 6 to 10 foundational Concept Nodes for an interactive flowchart.
+1. A rich, multi-branching Knowledge Tree (Directed Acyclic Graph - DAG) of 6 to 10 foundational Concept Nodes for an interactive flowchart.
 2. A day-wise syllabus split for ${totalDays || 30} days, mapping each day to a concept, specific topics, and estimated duration.
 
-HALLUCINATION GUARD — MANDATORY:
-- Only generate concepts, topics and formulas that are genuinely part of the course domain.
-- Do NOT use generic placeholder names like "System Architecture & Synthesis", "Core Axioms", or "Minimization & Performance Optimization" unless these are genuinely core to the course.
-- Every concept name must be a real, specific, domain-accurate academic concept.
-- The difficulty of all content must be calibrated to the student's knowledge level: ${level || "Intermediate"}.
-- Subtopics must be distinct and progressive — each should correspond to one focused study session.
+MANDATORY TREE & GRAPH STRUCTURE (CRITICAL):
+1. NEVER generate a single flat 1-line linear sequence (Node 1 -> Node 2 -> Node 3 -> Node 4). The curriculum MUST branch like a tree!
+2. Structure the concepts with multiple branching tracks:
+   - Root Node(s) [Level 0]: 1 foundational concept node with NO prerequisites ("prerequisites": []).
+   - Parallel Branch Tracks [Level 1]: 2 or 3 distinct specialization concepts that BOTH list the Root node as their prerequisite (e.g. "prerequisites": ["root-id"]).
+   - Intermediate Sub-branches [Level 2]: Concepts that deepen Level 1 tracks (e.g. "prerequisites": ["branch-a-id"]).
+   - Advanced Convergence / Capstone [Level 3]: 1 or 2 advanced concepts that depend on multiple upstream branches (e.g. "prerequisites": ["branch-a-id", "branch-b-id"]).
+3. Ensure prerequisite IDs strictly match the "id" of the corresponding concept in the "concepts" array.
+4. Concept names MUST be specific and accurately named for "${title}". NEVER use generic placeholder names like "Core Axioms" or "Linear Data Structures" if the course is about something else (e.g., for "Java OOP", use "Classes & Objects", "Inheritance", "Polymorphism", "Interfaces & Abstraction", "Exception Handling", "Collections & Generics").
+5. The difficulty of all content must be calibrated to the student's knowledge level: ${level || "Intermediate"}.
+6. Subtopics must be distinct and progressive — each should correspond to one focused study session.
 
 Output STRICTLY valid JSON matching this schema (NO markdown, no explanation outside JSON):
 {
@@ -63,7 +68,7 @@ Output STRICTLY valid JSON matching this schema (NO markdown, no explanation out
 
 Set concept #1 to status "current" (mastery 0%) and the rest to "upcoming". Set day #1 to status "current" and the rest to "locked".`;
 
-    const userPrompt = `Create a complete adaptive curriculum flowchart:
+    const userPrompt = `Create a complete adaptive branching knowledge tree curriculum:
 Course Title: ${title}
 Learning Goal: ${goal || "Master all foundational and advanced topics systematically"}
 Student Knowledge Level: ${level || "Intermediate"}
@@ -71,7 +76,7 @@ Total Time Budget: ${totalDays || 30} Days, ${minutesPerDay || 60} Minutes/Day
 Uploaded Syllabi/Materials: ${files && files.length > 0 ? files.join(", ") : "Standard textbook curriculum"}
 Source Links / Playlists: ${sources && sources.length > 0 ? sources.join(", ") : "Curated high-yield video lectures"}
 
-Generate a domain-accurate, level-appropriate curriculum for this course. Do NOT hallucinate generic concept names.`;
+Generate a domain-accurate, multi-branching tree knowledge graph for this course with real branching prerequisites.`;
 
     try {
       const rawText = await callGemini(userPrompt, systemPrompt);

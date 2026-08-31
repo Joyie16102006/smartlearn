@@ -309,7 +309,7 @@ export default function CourseOverviewPage() {
             </span>
           </div>
 
-          <div className="flex-1 overflow-auto p-4">
+          <div className="flex-1 p-4 flex flex-col min-h-0 overflow-hidden">
             <CourseFlowchart
               concepts={course.concepts || []}
               selectedConceptId={selectedConceptId}
