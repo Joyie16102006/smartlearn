@@ -24,7 +24,9 @@ MANDATORY TREE & GRAPH STRUCTURE (CRITICAL):
    - Intermediate Sub-branches [Level 2]: Concepts that deepen Level 1 tracks (e.g. "prerequisites": ["branch-a-id"]).
    - Advanced Convergence / Capstone [Level 3]: 1 or 2 advanced concepts that depend on multiple upstream branches (e.g. "prerequisites": ["branch-a-id", "branch-b-id"]).
 3. Ensure prerequisite IDs strictly match the "id" of the corresponding concept in the "concepts" array.
-4. Concept names MUST be specific and accurately named for "${title}". NEVER use generic placeholder names like "Core Axioms" or "Linear Data Structures" if the course is about something else (e.g., for "Java OOP", use "Classes & Objects", "Inheritance", "Polymorphism", "Interfaces & Abstraction", "Exception Handling", "Collections & Generics").
+4. Concept names MUST be specific, standard academic topic names (e.g. for Java/OOP: "Classes & Objects", "Inheritance & Method Overriding", "Polymorphism & Dynamic Dispatch", "Interfaces & Abstract Classes", "Exception Handling", "Collections Framework & Generics").
+   - NEVER prefix concept names with the course title (do NOT write "${title} - Classes", write "Classes & Objects").
+   - NEVER use generic placeholder names like "basics1", "basics2", "Topic 1", "XXXX", or "Core Axioms".
 5. The difficulty of all content must be calibrated to the student's knowledge level: ${level || "Intermediate"}.
 6. Subtopics must be distinct and progressive — each should correspond to one focused study session.
 

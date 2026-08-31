@@ -84,7 +84,7 @@ export default function NewCoursePage() {
     setIsGenerating(true);
     setGenerationStep(0);
 
-    // Dynamic phase stepper while API is computing
+    // Dynamic phase stepper while API is computing (smooth 800ms cadence)
     const stepInterval = setInterval(() => {
       setGenerationStep((prev) => {
         if (prev < generationPhases.length - 1) {
@@ -92,7 +92,7 @@ export default function NewCoursePage() {
         }
         return prev;
       });
-    }, 2500);
+    }, 800);
 
     try {
       let res: Response;

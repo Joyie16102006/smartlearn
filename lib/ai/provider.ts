@@ -222,8 +222,9 @@ class GeminiProvider implements AIProvider {
         // Force JSON output to eliminate markdown wrapper hallucinations
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 3000,
           response_mime_type: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
@@ -288,26 +289,21 @@ class OpenAIProvider implements AIProvider {
  */
 export function getAIProvider(serviceType?: "curriculum" | "lesson" | "assessment" | "revision" | "assistant" | "model3" | "model1" | "model2" | "model4" | "model5" | "model6" | string): AIProvider | null {
   const geminiKey = getEnv("GEMINI_API_KEY");
-  const nvidiaKey = getEnv("NVIDIA_API_KEY") || getEnv("NVAPI_KEY");
   const groqKey = getEnv("GROQ_API_KEY");
+  const nvidiaKey = getEnv("NVIDIA_API_KEY") || getEnv("NVAPI_KEY");
   const openaiKey = getEnv("OPENAI_API_KEY");
 
-  // If Model 3 (Daily Lesson Generator) is requested, prioritize Google Gemini 2.5 Flash
-  if ((serviceType === "model3" || serviceType === "lesson") && geminiKey && !geminiKey.startsWith("#")) {
+  // Prioritize Gemini 2.5 Flash for all interactive workflows (3s ultra-fast generation & live search grounding)
+  if (geminiKey && !geminiKey.startsWith("#")) {
     return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
-  }
-
-  // General provider resolution
-  if (nvidiaKey && !nvidiaKey.startsWith("#")) {
-    return new NvidiaProvider(nvidiaKey, getEnv("NVIDIA_MODEL"));
   }
 
   if (groqKey && !groqKey.startsWith("#")) {
     return new GroqProvider(groqKey, getEnv("GROQ_MODEL"));
   }
 
-  if (geminiKey && !geminiKey.startsWith("#")) {
-    return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
+  if (nvidiaKey && !nvidiaKey.startsWith("#")) {
+    return new NvidiaProvider(nvidiaKey, getEnv("NVIDIA_MODEL"));
   }
 
   if (openaiKey && !openaiKey.startsWith("#")) {
