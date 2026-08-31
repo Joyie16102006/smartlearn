@@ -59,8 +59,6 @@ export class RAGService {
    * - Bare page numbers and single-word lines
    */
   static filterPDFNoise(rawText: string): string {
-    if (!rawText) return "";
-
     const noiseHeadings = [
       /^(table of contents|contents)\s*$/im,
       /^(copyright|©|all rights reserved)/im,
@@ -70,11 +68,8 @@ export class RAGService {
       /^(bibliography|references)\s*$/im,
     ];
 
-    // Cap at first 35,000 characters (covers ~15 pages of syllabus) for instant sub-millisecond parsing
-    const targetText = rawText.slice(0, 35000);
-
     // First pass: sanitize null bytes & control chars, rejoin hyphenated line-breaks from PDF reflow
-    let text = RAGService.cleanString(targetText).replace(/-\n([a-z])/g, "$1");
+    let text = RAGService.cleanString(rawText).replace(/-\n([a-z])/g, "$1");
 
     // Remove decorative separator lines
     text = text.replace(/^[\s=\-_*•~]{4,}\s*$/gm, "");
