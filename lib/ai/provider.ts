@@ -75,25 +75,36 @@ class NvidiaProvider implements AIProvider {
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: 0.2,
-        max_tokens: 4096,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s strict timeout
 
-    if (!response.ok) {
-      throw new Error(`NVIDIA Nemotron API error (${response.status}): ${await response.text()}`);
+    try {
+      const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: 0.2,
+          max_tokens: 4096,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`NVIDIA Nemotron API error (${response.status}): ${await response.text()}`);
+      }
+      const data = await response.json();
+      return data?.choices?.[0]?.message?.content || "";
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      throw err;
     }
-    const data = await response.json();
-    return data?.choices?.[0]?.message?.content || "";
   }
 
   async generateJSON<T>(prompt: string, systemPrompt?: string): Promise<T> {
@@ -214,26 +225,37 @@ class GeminiProvider implements AIProvider {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
     const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        // Force JSON output to eliminate markdown wrapper hallucinations
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 8192,
-          response_mime_type: "application/json",
-        },
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error (${response.status}): ${await response.text()}`);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 3000,
+            response_mime_type: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Gemini API error (${response.status}): ${await response.text()}`);
+      }
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      return parseJSON<T>(text);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      throw err;
     }
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return parseJSON<T>(text);
   }
 }
 
@@ -288,26 +310,21 @@ class OpenAIProvider implements AIProvider {
  */
 export function getAIProvider(serviceType?: "curriculum" | "lesson" | "assessment" | "revision" | "assistant" | "model3" | "model1" | "model2" | "model4" | "model5" | "model6" | string): AIProvider | null {
   const geminiKey = getEnv("GEMINI_API_KEY");
-  const nvidiaKey = getEnv("NVIDIA_API_KEY") || getEnv("NVAPI_KEY");
   const groqKey = getEnv("GROQ_API_KEY");
+  const nvidiaKey = getEnv("NVIDIA_API_KEY") || getEnv("NVAPI_KEY");
   const openaiKey = getEnv("OPENAI_API_KEY");
 
-  // If Model 3 (Daily Lesson Generator) is requested, prioritize Google Gemini 2.5 Flash
-  if ((serviceType === "model3" || serviceType === "lesson") && geminiKey && !geminiKey.startsWith("#")) {
+  // Prioritize Gemini 2.5 Flash for all interactive workflows (1.5s ultra-low latency & search grounding)
+  if (geminiKey && !geminiKey.startsWith("#")) {
     return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
-  }
-
-  // General provider resolution
-  if (nvidiaKey && !nvidiaKey.startsWith("#")) {
-    return new NvidiaProvider(nvidiaKey, getEnv("NVIDIA_MODEL"));
   }
 
   if (groqKey && !groqKey.startsWith("#")) {
     return new GroqProvider(groqKey, getEnv("GROQ_MODEL"));
   }
 
-  if (geminiKey && !geminiKey.startsWith("#")) {
-    return new GeminiProvider(geminiKey, getEnv("GEMINI_MODEL") || "gemini-2.5-flash");
+  if (nvidiaKey && !nvidiaKey.startsWith("#")) {
+    return new NvidiaProvider(nvidiaKey, getEnv("NVIDIA_MODEL"));
   }
 
   if (openaiKey && !openaiKey.startsWith("#")) {
