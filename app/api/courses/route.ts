@@ -32,15 +32,8 @@ function sanitizeForPostgres<T>(obj: T): T {
  * Fetches all courses with full concepts, sources, and day plans from Supabase.
  */
 export async function GET() {
-
   try {
-    const user = await prisma.user.findFirst();
-    if (!user) {
-      return NextResponse.json({ courses: [] });
-    }
-
     const courses = await prisma.course.findMany({
-      where: { userId: user.id },
       include: {
         concepts: true,
         daysList: {
@@ -55,12 +48,39 @@ export async function GET() {
       ...c,
       daysList: c.daysList.map((d) => ({
         ...d,
-        topicsCovered: typeof d.topicsCovered === "string" ? JSON.parse(d.topicsCovered || "[]") : d.topicsCovered,
+        topicsCovered:
+          typeof d.topicsCovered === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(d.topicsCovered);
+                } catch {
+                  return [d.topicsCovered];
+                }
+              })()
+            : d.topicsCovered || [],
       })),
       concepts: c.concepts.map((concept) => ({
         ...concept,
-        keyFormulas: typeof concept.keyFormulas === "string" ? JSON.parse(concept.keyFormulas || "[]") : concept.keyFormulas,
-        prerequisites: [],
+        keyFormulas:
+          typeof concept.keyFormulas === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(concept.keyFormulas);
+                } catch {
+                  return [];
+                }
+              })()
+            : concept.keyFormulas || [],
+        prerequisites:
+          typeof concept.prerequisites === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(concept.prerequisites);
+                } catch {
+                  return [];
+                }
+              })()
+            : concept.prerequisites || [],
       })),
     }));
 

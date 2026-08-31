@@ -54,9 +54,36 @@ export async function GET(req: Request, { params }: Params) {
         difficulty: cn.difficulty,
         estimatedMinutes: cn.estimatedMinutes,
         description: cn.description,
-        prerequisites: cn.prerequisites ? JSON.parse(cn.prerequisites) : [],
-        dependents: cn.dependents ? JSON.parse(cn.dependents) : [],
-        keyFormulas: cn.keyFormulas ? JSON.parse(cn.keyFormulas) : [],
+        prerequisites:
+          typeof cn.prerequisites === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(cn.prerequisites);
+                } catch {
+                  return [];
+                }
+              })()
+            : cn.prerequisites || [],
+        dependents:
+          typeof cn.dependents === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(cn.dependents);
+                } catch {
+                  return [];
+                }
+              })()
+            : cn.dependents || [],
+        keyFormulas:
+          typeof cn.keyFormulas === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(cn.keyFormulas);
+                } catch {
+                  return [];
+                }
+              })()
+            : cn.keyFormulas || [],
         dayAssigned: cn.dayAssigned || undefined,
       })),
       daysList: course.daysList.map((d) => ({
@@ -64,7 +91,16 @@ export async function GET(req: Request, { params }: Params) {
         title: d.title,
         conceptId: d.conceptId,
         status: d.status as "completed" | "current" | "locked",
-        topicsCovered: JSON.parse(d.topicsCovered || "[]"),
+        topicsCovered:
+          typeof d.topicsCovered === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(d.topicsCovered);
+                } catch {
+                  return [d.topicsCovered];
+                }
+              })()
+            : d.topicsCovered || [],
         durationMinutes: d.durationMinutes,
         quizScore: d.quizScore || undefined,
         hasMistake: d.hasMistake,
